@@ -50,7 +50,6 @@ import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 import com.oracle.svm.core.genscavenge.AlignedHeapChunk.AlignedHeader;
-import com.oracle.svm.core.genscavenge.UnalignedHeapChunk.UnalignedHeader;
 import com.oracle.svm.core.genscavenge.graal.nodes.FormatArrayNode;
 import com.oracle.svm.core.genscavenge.remset.RememberedSet;
 import com.oracle.svm.core.graal.snippets.SubstrateAllocationSnippets;
@@ -111,7 +110,8 @@ public final class HeapImpl extends Heap {
     private final GCImpl gcImpl;
     private final RuntimeCodeInfoGCSupportImpl runtimeCodeInfoGcSupport;
     private final HeapAccounting accounting = new HeapAccounting();
-    private final ImageHeapChunkLogger imageHeapChunkLogger = new ImageHeapChunkLogger();
+
+    private AlignedHeader lastDynamicHubChunk;
 
     private AlignedHeader lastDynamicHubChunk;
 
@@ -123,7 +123,7 @@ public final class HeapImpl extends Heap {
     private volatile long refListWaiterWakeUpCounter;
 
     /** A cached list of all the classes, if someone asks for it. */
-    private List<Class<?>> classList;
+    private Class<?>[] classList;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public HeapImpl() {
@@ -283,13 +283,6 @@ public final class HeapImpl extends Heap {
     }
 
     void logChunks(Log log, boolean allowUnsafe) {
-        imageHeapChunkLogger.initialize(log);
-        for (ImageHeapInfo info : HeapImpl.getImageHeapInfos()) {
-            ImageHeapWalker.walkImageHeapChunks(info, imageHeapChunkLogger);
-        }
-        if (AuxiliaryImageHeap.isPresent()) {
-            AuxiliaryImageHeap.singleton().walkHeapChunks(imageHeapChunkLogger);
-        }
         getYoungGeneration().logChunks(log, allowUnsafe);
         getOldGeneration().logChunks(log);
         getChunkProvider().logFreeChunks(log);
@@ -333,15 +326,26 @@ public final class HeapImpl extends Heap {
     }
 
     @Override
-    protected List<Class<?>> getAllClasses() {
+    protected Class<?>[] getAllClasses() {
         /* Two threads might race to set classList, but they compute the same result. */
-        if (classList == null) {
+        if (getCachedClasses() == null) {
             ArrayList<Class<?>> list = findAllDynamicHubs();
             /* Ensure that other threads see consistent values once the list is published. */
             MembarNode.memoryBarrier(MembarNode.FenceKind.STORE_STORE);
-            classList = list;
+            setCachedClasses(list);
         }
+        return getCachedClasses();
+    }
+
+    @Override
+    public Class<?>[] getCachedClasses() {
         return classList;
+    }
+
+
+    private void setCachedClasses(List<Class<?>> list) {
+        classList = new Class[list.size()];
+        list.toArray(classList);
     }
 
     private ArrayList<Class<?>> findAllDynamicHubs() {
@@ -966,28 +970,80 @@ public final class HeapImpl extends Heap {
         }
     }
 
-    private static final class ImageHeapChunkLogger implements HeapChunkVisitor {
-        private Log log;
+    public static DynamicHub allocateDynamicHub(int vTableSlots) {
+        AllocateDynamicHubOp vmOp = new AllocateDynamicHubOp(vTableSlots);
+        vmOp.enqueue();
+        return vmOp.result;
+    }
 
-        @SuppressWarnings("hiding")
-        void initialize(Log log) {
-            this.log = log;
+    private static class AllocateDynamicHubOp extends JavaVMOperation {
+        int vTableSlots;
+        DynamicHub result;
+
+        AllocateDynamicHubOp(int vTableSlots) {
+            super(VMOperationInfos.get(AllocateDynamicHubOp.class, "Allocate DynamicHub", SystemEffect.SAFEPOINT));
+            this.vTableSlots = vTableSlots;
         }
 
         @Override
-        public void visitAlignedChunk(AlignedHeader chunk) {
-            Pointer bottom = AlignedHeapChunk.getObjectsStart(chunk);
-            Pointer top = HeapChunk.getTopPointer(chunk);
-            Pointer end = AlignedHeapChunk.getObjectsEnd(chunk);
-            HeapChunkLogging.logChunk(log, chunk, bottom, top, end, true, "I", false);
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+        public boolean isGC() {
+            /* needs to append chunks into oldGen */
+            return true;
         }
 
         @Override
-        public void visitUnalignedChunk(UnalignedHeader chunk) {
-            Pointer bottom = UnalignedHeapChunk.getObjectStart(chunk);
-            Pointer top = HeapChunk.getTopPointer(chunk);
-            Pointer end = UnalignedHeapChunk.getObjectEnd(chunk);
-            HeapChunkLogging.logChunk(log, chunk, bottom, top, end, false, "I", false);
+        protected void operate() {
+            DynamicHub hubOfDynamicHub = DynamicHub.fromClass(Class.class);
+            /*
+             * Note that layoutEncoding already encodes the size of a DynamicHub and it is aware of
+             * its hybrid nature, including the size required for a VTable slot.
+             *
+             * Also note that inlined fields like `closedTypeWorldTypeCheckSlots` are not relevant
+             * here, as they are not available in the open type world configuration.
+             */
+            UnsignedWord size = LayoutEncoding.getArrayAllocationSize(hubOfDynamicHub.getLayoutEncoding(), vTableSlots);
+
+            Pointer memory = Word.nullPointer();
+            if (getHeapImpl().lastDynamicHubChunk.isNonNull()) {
+                /*
+                 * GR-57355: move this fast-path out of vmOp. Needs some locking (it's not
+                 * thread-local)
+                 */
+                memory = AlignedHeapChunk.allocateMemory(getHeapImpl().lastDynamicHubChunk, size);
+            }
+
+            if (memory.isNull()) {
+                /* Either no storage for DynamicHubs yet or we are out of memory */
+                allocateNewDynamicHubChunk();
+
+                memory = AlignedHeapChunk.allocateMemory(getHeapImpl().lastDynamicHubChunk, size);
+            }
+
+            VMError.guarantee(memory.isNonNull(), "failed to allocate DynamicHub");
+
+            /* DynamicHubs live allocated on aligned heap chunks */
+            boolean unaligned = false;
+            result = (DynamicHub) FormatArrayNode.formatArray(memory, DynamicHub.class, vTableSlots, true, unaligned, AllocationSnippets.FillContent.WITH_ZEROES, true);
+        }
+
+        private static void allocateNewDynamicHubChunk() {
+            /*
+             * GR-60085: Should be a dedicated generation. Make sure that those chunks are close to
+             * the heap base. The hub is stored as offset relative to the heap base. There are 5
+             * status bits in the header and in addition, compressed references use a three-bit
+             * shift that word-aligns objects. This results in a 35-bit address range of 32 GB, of
+             * which DynamicHubs must reside in the lowest 1 GB.
+             */
+            OldGeneration oldGeneration = getHeapImpl().getOldGeneration();
+
+            /*
+             * GR-60085: DynamicHub objects must never be be moved. Pin them either by (1) pinning
+             * each DynamicHub, or (2) mark the whole chunk as pinned (not supported yet).
+             */
+            getHeapImpl().lastDynamicHubChunk = oldGeneration.requestAlignedChunk();
+
+            oldGeneration.appendChunk(getHeapImpl().lastDynamicHubChunk);
         }
     }
 
