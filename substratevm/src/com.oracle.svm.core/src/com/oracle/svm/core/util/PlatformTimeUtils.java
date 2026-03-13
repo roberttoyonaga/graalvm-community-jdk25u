@@ -33,16 +33,13 @@ import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.PointerBase;
 
-import com.oracle.svm.core.Uninterruptible;
-
-import jdk.graal.compiler.api.replacements.Fold;
+import com.oracle.svm.shared.util.BasedOnJDKFile;
 
 /**
  * Platform dependent time related utils. See also {@link TimeUtils} for platform independent utils.
  */
 public abstract class PlatformTimeUtils {
 
-    @Fold
     public static PlatformTimeUtils singleton() {
         return ImageSingletons.lookup(PlatformTimeUtils.class);
     }
@@ -59,7 +56,6 @@ public abstract class PlatformTimeUtils {
         // that Recording::getStopTime() returns an Instant that
         // is in sync.
         SecondsNanos t = UnsafeStackValue.get(SecondsNanos.class);
-        PlatformTimeUtils.singleton().javaTimeSystemUTC(t);
         javaTimeSystemUTC(t);
         long seconds = t.getSeconds();
         long nanos = t.getNanos();
@@ -76,10 +72,13 @@ public abstract class PlatformTimeUtils {
     public interface SecondsNanos extends PointerBase {
         @RawField
         void setNanos(long value);
+
         @RawField
         long getNanos();
+
         @RawField
         void setSeconds(long value);
+
         @RawField
         long getSeconds();
     }

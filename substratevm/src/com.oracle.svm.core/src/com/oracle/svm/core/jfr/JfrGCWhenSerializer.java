@@ -29,6 +29,7 @@ import org.graalvm.nativeimage.Platforms;
 
 public class JfrGCWhenSerializer implements JfrSerializer {
     private JfrGCWhen[] values;
+
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrGCWhenSerializer() {
         values = JfrGCWhen.values();
@@ -38,6 +39,7 @@ public class JfrGCWhenSerializer implements JfrSerializer {
     public void write(JfrChunkWriter writer) {
         writer.writeCompressedLong(JfrType.GCWhen.getId());
         writer.writeCompressedLong(values.length);
+        // noinspection ForLoopReplaceableByForEach: must be allocation free.
         for (int i = 0; i < values.length; i++) {
             writer.writeCompressedLong(values[i].getId());
             writer.writeString(values[i].getText());

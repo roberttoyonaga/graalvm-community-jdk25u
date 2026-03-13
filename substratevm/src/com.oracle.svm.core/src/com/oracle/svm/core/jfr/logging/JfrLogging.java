@@ -53,9 +53,22 @@ public class JfrLogging {
     public void parseConfiguration(String config) {
         JfrLogConfiguration.parse(config);
     }
-
-    public void warnInternal(String message) {
+    
+    @RestrictHeapAccess(access = NO_ALLOCATION, reason = "May be used during OOME emergency dump.")
+    public void logJfrSystemError(String message) {
         int tagSetId = SubstrateUtil.cast(LogTag.JFR_SYSTEM, Target_jdk_jfr_internal_LogTag.class).id;
+        log(tagSetId, JfrLogConfiguration.JfrLogLevel.ERROR.level, message);
+    }
+
+    @RestrictHeapAccess(access = NO_ALLOCATION, reason = "May be used during OOME emergency dump.")
+    public void logJfrInfo(String message) {
+        int tagSetId = SubstrateUtil.cast(LogTag.JFR, Target_jdk_jfr_internal_LogTag.class).id;
+        log(tagSetId, JfrLogConfiguration.JfrLogLevel.INFO.level, message);
+    }
+
+    @RestrictHeapAccess(access = NO_ALLOCATION, reason = "May be used during OOME emergency dump.")
+    public void logJfrWarning(String message) {
+        int tagSetId = SubstrateUtil.cast(LogTag.JFR, Target_jdk_jfr_internal_LogTag.class).id;
         log(tagSetId, JfrLogConfiguration.JfrLogLevel.WARNING.level, message);
     }
 

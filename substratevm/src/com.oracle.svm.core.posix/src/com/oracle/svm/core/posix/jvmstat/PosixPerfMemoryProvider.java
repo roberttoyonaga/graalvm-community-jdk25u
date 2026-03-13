@@ -74,7 +74,13 @@ import com.oracle.svm.core.posix.headers.Mman;
 import com.oracle.svm.core.posix.headers.PosixFile;
 import com.oracle.svm.core.posix.headers.Signal;
 import com.oracle.svm.core.posix.headers.Unistd;
-import com.oracle.svm.core.util.BasedOnJDKFile;
+import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.RuntimeAccessOnly;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
+import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
+import com.oracle.svm.shared.util.BasedOnJDKFile;
 
 import jdk.graal.compiler.core.common.NumUtil;
 
@@ -349,7 +355,7 @@ class PosixPerfMemoryProvider implements PerfMemoryProvider {
 
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-24+13/src/hotspot/os/posix/perfMemory_posix.cpp#L291-L341")
     private static SecureDirectory openDirectorySecure(CCharPointer directory) {
-        int fd = restartableOpen(directory, O_RDONLY() | O_NOFOLLOW(), 0);
+        int fd = Fcntl.NoTransitions.restartableOpen(directory, O_RDONLY() | O_NOFOLLOW(), 0);
         if (fd == -1) {
             return null;
         }
@@ -463,16 +469,6 @@ class PosixPerfMemoryProvider implements PerfMemoryProvider {
             return errno == ESRCH() || errno == EPERM();
         }
         return false;
-    }
-
-    @Uninterruptible(reason = "LibC.errno() must not be overwritten accidentally.")
-    private static int restartableOpen(CCharPointer directory, int flags, int mode) {
-        int result;
-        do {
-            result = Fcntl.NoTransitions.open(directory, flags, mode);
-        } while (result == -1 && LibC.errno() == Errno.EINTR());
-
-        return result;
     }
 
     @Uninterruptible(reason = "LibC.errno() must not be overwritten accidentally.")
