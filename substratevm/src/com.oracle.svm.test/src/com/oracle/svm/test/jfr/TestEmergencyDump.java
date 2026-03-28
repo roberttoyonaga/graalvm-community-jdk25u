@@ -26,12 +26,14 @@
 
 package com.oracle.svm.test.jfr;
 
+import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.JfrEvent;
 import com.oracle.svm.test.jfr.events.StringEvent;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -40,7 +42,6 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.SubstrateJVM;
 
 /**
@@ -59,55 +60,59 @@ public class TestEmergencyDump extends JfrRecordingTest {
             return;
         }
 
+        String[] testedEvents = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
+        Path dumpFile = Path.of("svm_oom_pid_" + ProcessHandle.current().pid() + ".jfr");
+        runEmergencyDumpScenario(testedEvents);
+        assertEmergencyDump(dumpFile, testedEvents, createExpectedStrings());
+        Files.deleteIfExists(dumpFile);
+        assertNoResidualTestedEvents(testedEvents);
+    }
+
+    private void runEmergencyDumpScenario(String[] testedEvents) throws Throwable {
+        Recording recording = startRecording(testedEvents);
+        try {
+            emitStringEvent("first");
+            recording.dump(createTempJfrFile());
+
+            emitStringEvent("second\0nul");
+            recording.dump(createTempJfrFile());
+
+            emitStringEvent("third \uD83D\uDE80");
+            SubstrateJVM.get().vmOutOfMemoryErrorRotation();
+        } finally {
+            recording.stop();
+            recording.close();
+        }
+    }
+
+    private static void emitStringEvent(String message) {
+        StringEvent event = new StringEvent();
+        event.message = message;
+        event.commit();
+    }
+
+    private static List<String> createExpectedStrings() {
         List<String> expectedStrings = new ArrayList<>();
         expectedStrings.add("first");
         expectedStrings.add("second\0nul");
         expectedStrings.add("third \uD83D\uDE80");
+        return expectedStrings;
+    }
 
-        String[] testedEvents = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
-        Recording recording = startRecording(testedEvents);
-        // This event will be in chunk #1 in disk repository.
-        StringEvent e1 = new StringEvent();
-        e1.message = expectedStrings.get(0);
-        e1.commit();
-
-        // Invoke chunk rotation.
-        recording.dump(createTempJfrFile());
-
-        // This event will be in chunk #2 in disk repository.
-        StringEvent e2 = new StringEvent();
-        e2.message = expectedStrings.get(1);
-        e2.commit();
-
-        // Invoke chunk rotation.
-        recording.dump(createTempJfrFile());
-
-        // This event will be in in-flight and should be flushed upon emergency dump.
-        StringEvent e3 = new StringEvent();
-        e3.message = expectedStrings.get(2);
-        e3.commit();
-
-        SubstrateJVM.get().vmOutOfMemoryErrorRotation();
-        recording.stop();
-        recording.close();
-
-        String dumpFile = "svm_oom_pid_" + ProcessHandle.current().pid() + ".jfr";
-        Path p = Path.of(dumpFile);
-        assertTrue("emergency dump file does not exist.", Files.exists(p));
-        List<RecordedEvent> events = getEvents(Path.of(dumpFile), testedEvents, true);
+    private static void assertEmergencyDump(Path dumpFile, String[] testedEvents, List<String> expectedStrings) throws IOException {
+        assertTrue("emergency dump file does not exist.", Files.exists(dumpFile));
+        List<RecordedEvent> events = getEvents(dumpFile, testedEvents, true);
         for (RecordedEvent event : events) {
             if (STRING_EVENT_NAME.equals(event.getEventType().getName())) {
-                assertTrue(expectedStrings.remove(event.getString("message")));
+                String message = event.getString("message");
+                assertTrue("Unexpected or duplicate StringEvent in emergency dump: " + message, expectedStrings.remove(message));
             } else {
                 assertEquals(JfrEvent.DumpReason.getName(), event.getEventType().getName());
                 assertEquals(OUT_OF_MEMORY_REASON, event.getString("reason"));
                 assertEquals(-1, event.getInt("recordingId"));
             }
         }
-        assertEquals(4, events.size());
-        assertEquals(0, expectedStrings.size());
-
-        Files.deleteIfExists(p);
-        assertNoResidualTestedEvents(testedEvents);
+        assertEquals("Unexpected number of tested events in emergency dump", 4, events.size());
+        assertEquals("Missing StringEvents from emergency dump", 0, expectedStrings.size());
     }
 }

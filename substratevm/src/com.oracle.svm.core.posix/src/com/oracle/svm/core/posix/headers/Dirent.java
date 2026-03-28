@@ -25,7 +25,9 @@
 package com.oracle.svm.core.posix.headers;
 
 import org.graalvm.nativeimage.c.CContext;
+import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
+import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CFieldAddress;
 import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CCharPointer;
@@ -38,6 +40,9 @@ import org.graalvm.word.PointerBase;
  */
 @CContext(PosixDirectives.class)
 public class Dirent {
+    @CConstant
+    public static native int DT_LNK();
+
     @CFunction
     public static native DIR fdopendir(int fd);
 
@@ -52,6 +57,9 @@ public class Dirent {
 
     @CStruct(addStructKeyword = true)
     public interface dirent extends PointerBase {
+        @CField
+        byte d_type();
+
         @CFieldAddress
         CCharPointer d_name();
     }

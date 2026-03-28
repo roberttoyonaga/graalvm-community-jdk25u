@@ -47,6 +47,9 @@ public class LinuxStat {
         public static native int fstat(int fd, stat buf);
 
         @CFunction(transition = NO_TRANSITION)
+        public static native int fstatat(int fd, @CConst CCharPointer path, stat buf, int flag);
+
+        @CFunction(transition = NO_TRANSITION)
         public static native int lstat(@CConst CCharPointer path, stat buf);
     }
 }

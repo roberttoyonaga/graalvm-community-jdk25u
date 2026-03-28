@@ -107,6 +107,7 @@ public class TestEmergencyDumpConstantPool extends JfrRecordingTest {
     private static Path getEmergencyDumpFile() {
         return Path.of("svm_oom_pid_" + ProcessHandle.current().pid() + ".jfr");
     }
+
     private static final class EmergencyDumpHelper {
     }
 

@@ -29,6 +29,7 @@ package com.oracle.svm.core.posix.jfr;
 import com.oracle.svm.core.VMInspectionOptions;
 import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.nmt.NmtCategory;
+import com.oracle.svm.core.posix.PosixStat;
 import com.oracle.svm.core.posix.headers.Dirent;
 import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.Fcntl;
@@ -59,6 +60,7 @@ import com.oracle.svm.shared.util.SubstrateUtil;
 
 import java.nio.charset.StandardCharsets;
 
+import static com.oracle.svm.core.posix.headers.Fcntl.AT_SYMLINK_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_RDONLY;
 
@@ -76,6 +78,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     private static final byte[] DUMP_FILE_PREFIX = "svm_oom_pid_".getBytes(StandardCharsets.UTF_8);
     private static final byte[] CHUNKFILE_EXTENSION_BYTES = ".jfr".getBytes(StandardCharsets.UTF_8);
     private Dirent.DIR directory;
+    private int directoryFd;
     private byte[] pidBytes;
     private byte[] dumpPathBytes;
     private byte[] repositoryLocationBytes;
@@ -94,6 +97,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         savePid();
         pathBuffer = NativeMemory.calloc(JVM_MAXPATHLEN + 1, NmtCategory.JFR);
         directory = Word.nullPointer();
+        directoryFd = -1;
         saveCwd();
     }
 
@@ -205,8 +209,18 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
             GrowableWordArray sortedChunkFilenames = StackValue.get(GrowableWordArray.class);
             GrowableWordArrayAccess.initialize(sortedChunkFilenames);
             try {
-                iterateRepository(sortedChunkFilenames);
-                writeEmergencyDumpFile(sortedChunkFilenames);
+                if (openDirectory()) {
+                    try {
+                        /*
+                         * Keep the repository directory open for the whole scan so validation and
+                         * chunk reopening stay anchored to the same directory instance.
+                         */
+                        iterateRepository(sortedChunkFilenames);
+                        writeEmergencyDumpFile(sortedChunkFilenames);
+                    } finally {
+                        closeDirectory();
+                    }
+                }
             } finally {
                 freeChunkFilenames(sortedChunkFilenames);
                 GrowableWordArrayAccess.freeData(sortedChunkFilenames);
@@ -268,35 +282,31 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L310-L345")
     private void iterateRepository(GrowableWordArray gwa) {
         int count = 0;
-        // Open directory
-        if (openDirectory()) {
-            if (directory.isNull()) {
-                return;
-            }
-            // Iterate files in the repository and append filtered file names to the files array
-            Dirent.dirent entry;
-            while ((entry = Dirent.readdir(directory)).isNonNull()) {
-                // Filter files
+        if (directory.isNull()) {
+            return;
+        }
+        // Iterate files in the repository and append filtered file names to the files array.
+        Dirent.dirent entry;
+        while ((entry = Dirent.readdir(directory)).isNonNull()) {
+            // Filter files.
+            if (filter(entry)) {
                 CCharPointer fn = entry.d_name();
-                if (filter(fn)) {
-                    CCharPointer fnCopy = LibC.strdup(fn);
-                    if (fnCopy.isNull()) {
-                        SubstrateJVM.getLogging().logJfrSystemError("Unable to copy chunk filename during jfr emergency dump");
-                        continue;
-                    }
-                    // Append filtered files to list
-                    if (!GrowableWordArrayAccess.add(gwa, (Word) (Pointer) fnCopy, NmtCategory.JFR)) {
-                        LibC.free(fnCopy);
-                        SubstrateJVM.getLogging().logJfrSystemError("Unable to add chunk filename to list during jfr emergency dump");
-                    } else {
-                        count++;
-                    }
+                CCharPointer fnCopy = LibC.strdup(fn);
+                if (fnCopy.isNull()) {
+                    SubstrateJVM.getLogging().logJfrSystemError("Unable to copy chunk filename during jfr emergency dump");
+                    continue;
+                }
+                // Append filtered files to list.
+                if (!GrowableWordArrayAccess.add(gwa, (Word) (Pointer) fnCopy, NmtCategory.JFR)) {
+                    LibC.free(fnCopy);
+                    SubstrateJVM.getLogging().logJfrSystemError("Unable to add chunk filename to list during jfr emergency dump");
+                } else {
+                    count++;
                 }
             }
-            closeDirectory();
-            if (count > 0) {
-                GrowableWordArrayAccess.qsort(gwa, 0, count - 1, PosixJfrEmergencyDumpSupport::compare);
-            }
+        }
+        if (count > 0) {
+            GrowableWordArrayAccess.qsort(gwa, 0, count - 1, PosixJfrEmergencyDumpSupport::compare);
         }
     }
 
@@ -332,11 +342,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
 
         for (int i = 0; i < sortedChunkFilenames.getSize(); i++) {
             CCharPointer fn = (CCharPointer) ((Pointer) GrowableWordArrayAccess.get(sortedChunkFilenames, i));
-            CCharPointer chunkPath = fullyQualified(fn);
-            if (chunkPath.isNull()) {
-                continue;
-            }
-            RawFileDescriptor chunkFd = getFileSupport().open(chunkPath, FileAccessMode.READ);
+            RawFileDescriptor chunkFd = openRepositoryFile(fn);
             if (getFileSupport().isValid(chunkFd)) {
 
                 // Read it's size
@@ -369,6 +375,16 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         NullableNativeMemory.free(copyBlock);
     }
 
+    @Uninterruptible(reason = "LibC.errno() must not be overwritten accidentally.")
+    private RawFileDescriptor openRepositoryFile(CCharPointer fn) {
+        if (directoryFd == -1) {
+            return Word.nullPointer();
+        }
+        // Reopen the validated repository entry relative to the directory we are currently
+        // scanning.
+        return Word.signed(restartableOpenat(directoryFd, fn, O_RDONLY() | O_NOFOLLOW(), 0));
+    }
+
     private static void freeChunkFilenames(GrowableWordArray chunkFilenames) {
         for (int i = 0; i < chunkFilenames.getSize(); i++) {
             CCharPointer fn = (CCharPointer) ((Pointer) GrowableWordArrayAccess.get(chunkFilenames, i));
@@ -395,6 +411,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
             SubstrateJVM.getLogging().logJfrSystemError(openDirectoryWarning);
             return false;
         }
+        directoryFd = fd;
         return true;
     }
 
@@ -407,22 +424,22 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         return getPathBuffer();
     }
 
-    /**
-     * See com.oracle.svm.core.posix.jvmstat.PosixPerfMemoryProvider#restartableOpen(CCharPointer,
-     * int, int).
-     */
     @Uninterruptible(reason = "LibC.errno() must not be overwritten accidentally.")
-    private static int restartableOpen(CCharPointer directory, int flags, int mode) {
+    private static int restartableOpenat(int fd, CCharPointer filename, int flags, int mode) {
         int result;
         do {
-            result = Fcntl.NoTransitions.open(directory, flags, mode);
+            result = Fcntl.NoTransitions.openat(fd, filename, flags, mode);
         } while (result == -1 && LibC.errno() == Errno.EINTR());
 
         return result;
     }
 
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L276-L308")
-    private boolean filter(CCharPointer fn) {
+    private boolean filter(Dirent.dirent entry) {
+        if (entry.d_type() == (byte) Dirent.DT_LNK()) {
+            return false;
+        }
+        CCharPointer fn = entry.d_name();
 
         // Check filename length
         int filenameLength = (int) SubstrateUtil.strlen(fn).rawValue();
@@ -438,14 +455,22 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
                 return false;
             }
         }
-
-        CCharPointer chunkPath = fullyQualified(fn);
-        if (chunkPath.isNull()) {
+        // Only merge normal repository chunk names, not arbitrary *.jfr files dropped beside them.
+        if (!hasChunkFilenameFormat(fn, filenameLength - CHUNKFILE_EXTENSION_BYTES.length)) {
             return false;
         }
 
-        // Verify it can be opened and receive a valid file descriptor
-        RawFileDescriptor chunkFd = getFileSupport().open(chunkPath, FileAccessMode.READ);
+        if (directoryFd == -1) {
+            return false;
+        }
+
+        PosixStat.stat statBuffer = StackValue.get(PosixStat.sizeOfStatStruct());
+        if (PosixStat.restartableFstatat(directoryFd, fn, statBuffer, AT_SYMLINK_NOFOLLOW()) == -1 || PosixStat.S_ISLNK(statBuffer)) {
+            return false;
+        }
+
+        // Verify it can be opened and receive a valid file descriptor.
+        RawFileDescriptor chunkFd = openRepositoryFile(fn);
         if (!getFileSupport().isValid(chunkFd)) {
             return false;
         }
@@ -459,30 +484,34 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         return true;
     }
 
-    /**
-     * Given a chunk file name, it returns the fully qualified filename.
-     */
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L263-L273")
-    private CCharPointer fullyQualified(CCharPointer fn) {
-        long fnLength = SubstrateUtil.strlen(fn).rawValue();
-        if (repositoryLocationBytes == null || repositoryLocationBytes.length + 1L + fnLength >= JVM_MAXPATHLEN) {
-            return Word.nullPointer();
+    private static boolean hasChunkFilenameFormat(CCharPointer fn, int baseNameLength) {
+        if (baseNameLength < ISO_8601_LEN) {
+            return false;
         }
-        int idx = 0;
-
-        clearPathBuffer();
-
-        // Cached in RepositoryIterator::RepositoryIterator and used in fully_qualified
-        idx = writeToPathBuffer(repositoryLocationBytes, idx);
-
-        // Add delimiter
-        getPathBuffer().write(idx++, FILE_SEPARATOR);
-
-        for (int i = 0; i < fnLength; i++) {
-            getPathBuffer().write(idx++, fn.read(i));
+        // Repository chunks are timestamped as yyyy_MM_dd_HH_mm_ss[_NN].jfr.
+        for (int i = 0; i < ISO_8601_LEN; i++) {
+            byte ch = fn.read(i);
+            if (i == 4 || i == 7 || i == 10 || i == 13 || i == 16) {
+                if (ch != '_') {
+                    return false;
+                }
+            } else if (ch < '0' || ch > '9') {
+                return false;
+            }
         }
-        getPathBuffer().write(idx, (byte) 0);
-        return getPathBuffer();
+        if (baseNameLength == ISO_8601_LEN) {
+            return true;
+        }
+        if (fn.read(ISO_8601_LEN) != '_' || baseNameLength == ISO_8601_LEN + 1) {
+            return false;
+        }
+        for (int i = ISO_8601_LEN + 1; i < baseNameLength; i++) {
+            byte ch = fn.read(i);
+            if (ch < '0' || ch > '9') {
+                return false;
+            }
+        }
+        return true;
     }
 
     private CCharPointer getPathBuffer() {
@@ -525,6 +554,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
             Dirent.closedir(directory);
             directory = Word.nullPointer();
         }
+        directoryFd = -1;
     }
 
     @Override

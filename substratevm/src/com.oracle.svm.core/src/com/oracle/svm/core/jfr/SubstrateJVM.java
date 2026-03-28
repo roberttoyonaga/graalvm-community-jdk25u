@@ -103,7 +103,7 @@ public class SubstrateJVM {
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final JfrRecorderThread recorderThread;
     private final JfrOldObjectProfiler oldObjectProfiler;
-    private final JfrEndRecordingOperation endRecordingOperation;
+    private JfrEndRecordingOperation endRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;
@@ -141,8 +141,6 @@ public class SubstrateJVM {
         unlockedChunkWriter = writeFile ? new JfrChunkFileWriter(globalMemory, stackTraceRepo, methodRepo, typeRepo, symbolRepo, threadRepo, oldObjectRepo) : new JfrChunkNoWriter();
         recorderThread = new JfrRecorderThread(globalMemory, unlockedChunkWriter);
         oldObjectProfiler = new JfrOldObjectProfiler();
-        endRecordingOperation = new JfrEndRecordingOperation();
-
         jfrLogging = new JfrLogging();
         eventThrottler = new JfrEventThrottling();
 
@@ -262,6 +260,13 @@ public class SubstrateJVM {
         stackTraceRepo.setStackTraceDepth(NumUtil.safeToInt(options.stackDepth.getValue()));
 
         recorderThread.start();
+        /*
+         * Preallocate the stop-recording VM operation while the runtime is healthy, so the
+         * emergency-dump path does not need to allocate it after an OOM. This must not happen in
+         * the hosted constructor because JavaVMOperation initialization touches runtime-only random
+         * accessors.
+         */
+        endRecordingOperation = new JfrEndRecordingOperation();
 
         initialized = true;
         return true;

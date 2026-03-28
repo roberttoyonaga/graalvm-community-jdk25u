@@ -44,6 +44,7 @@ import com.oracle.svm.core.heap.OutOfMemoryUtil;
 import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.JfrEvent;
 import com.oracle.svm.core.jfr.SubstrateJVM;
+import com.oracle.svm.shared.util.ClassUtil;
 import com.oracle.svm.test.jfr.events.StringEvent;
 
 import jdk.jfr.Recording;
@@ -72,7 +73,7 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
 
         String[] events = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
         long pid = ProcessHandle.current().pid();
-        Path rootDumpDir = Files.createTempDirectory(getClass().getSimpleName() + "-");
+        Path rootDumpDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-");
         List<Path> dumpFiles = new ArrayList<>(ITERATIONS);
         try {
             for (int i = 0; i < ITERATIONS; i++) {
@@ -110,16 +111,16 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
 
     @Test
     public void testActualOutOfMemoryCreatesEmergencyDump() throws Throwable {
+        if (!HasJfrSupport.get()) {
+            return;
+        }
         if (isActualOomWorker()) {
             runActualOutOfMemoryWorker();
             return;
         }
-        if (!HasJfrSupport.get()) {
-            return;
-        }
 
         String message = "actual-oom";
-        Path dumpDir = Files.createTempDirectory(getClass().getSimpleName() + "-actual-oom-");
+        Path dumpDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-actual-oom-");
         try {
             WorkerResult worker = runActualOutOfMemoryWorkerProcess(dumpDir, message);
             assertEquals(worker.output(), 0, worker.exitCode());
@@ -139,6 +140,13 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
     }
 
     private void runActualOutOfMemoryWorker() throws Throwable {
+        /*
+         * Hosted analysis can reach this helper while building the junit image. Bail out early on
+         * configurations that do not initialize the runtime JFR singletons.
+         */
+        if (!HasJfrSupport.get()) {
+            return;
+        }
         String dumpDirProperty = System.getProperty(ACTUAL_OOM_DUMP_DIR_PROPERTY);
         String message = System.getProperty(ACTUAL_OOM_MESSAGE_PROPERTY);
         assertTrue("missing dump dir property for actual OOM worker", dumpDirProperty != null && !dumpDirProperty.isEmpty());
@@ -149,13 +157,11 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
         SubstrateJVM.get().setDumpPath(dumpDir.toString());
 
         Recording recording = startRecording(events);
-        RecursivePayload payload = null;
         emitStringEvent(message);
         try {
-            payload = exhaustHeapRecursively();
+            exhaustHeapRecursively();
             fail("Expected OutOfMemoryError");
         } catch (OutOfMemoryError expected) {
-            payload = null;
             System.gc();
         }
 
@@ -249,7 +255,8 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
 
     private static final class RecursivePayload {
         private byte[][] blocks;
-        private RecursivePayload next;
+        // Keep the recursive allocation chain reachable until the OOM is thrown.
+        @SuppressWarnings("unused") private RecursivePayload next;
     }
 
     private record WorkerResult(long pid, int exitCode, String output) {
