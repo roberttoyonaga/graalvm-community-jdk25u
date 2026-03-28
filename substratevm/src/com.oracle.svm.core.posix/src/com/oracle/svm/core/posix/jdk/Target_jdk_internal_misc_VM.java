@@ -29,7 +29,6 @@ import org.graalvm.nativeimage.impl.InternalPlatform;
 
 import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
-import com.oracle.svm.core.graal.stackvalue.UnsafeStackValue;
 import com.oracle.svm.shared.util.BasedOnJDKFile;
 
 import com.oracle.svm.core.util.PlatformTimeUtils;
@@ -43,13 +42,12 @@ final class Target_jdk_internal_misc_VM {
     public static long getNanoTimeAdjustment(long offsetInSeconds) {
         long maxDiffSecs = 0x0100000000L;
         long minDiffSecs = -maxDiffSecs;
-        SecondsNanos time = UnsafeStackValue.get(SecondsNanos.class);
-        PlatformTimeUtils.singleton().javaTimeSystemUTC(time);
+        SecondsNanos time = PlatformTimeUtils.singleton().javaTimeSystemUTC();
 
-        long diff = time.getSeconds() - offsetInSeconds;
+        long diff = time.seconds() - offsetInSeconds;
         if (diff >= maxDiffSecs || diff <= minDiffSecs) {
             return -1;
         }
-        return (diff * 1000000000) + time.getNanos();
+        return (diff * 1000000000) + time.nanos();
     }
 }

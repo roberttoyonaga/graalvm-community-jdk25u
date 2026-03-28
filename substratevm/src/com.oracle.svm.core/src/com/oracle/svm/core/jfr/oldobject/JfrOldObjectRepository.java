@@ -45,10 +45,11 @@ import com.oracle.svm.core.jfr.JfrRepository;
 import com.oracle.svm.core.jfr.JfrType;
 import com.oracle.svm.core.jfr.traceid.JfrTraceIdEpoch;
 import com.oracle.svm.core.locks.VMMutex;
-import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 
 public final class JfrOldObjectRepository implements JfrRepository {
     private static final int OBJECT_DESCRIPTION_MAX_LENGTH = 100;
+    private static final int ELLIPSIS_LENGTH = 3;
 
     private final VMMutex mutex;
     private final JfrOldObjectEpochData epochData0;
@@ -122,28 +123,36 @@ public final class JfrOldObjectRepository implements JfrRepository {
         Pointer buffer = UnsafeStackValue.get(OBJECT_DESCRIPTION_MAX_LENGTH);
         Pointer bufferEnd = buffer.add(OBJECT_DESCRIPTION_MAX_LENGTH);
 
-        int prefixLength = UninterruptibleUtils.String.modifiedUTF8Length(prefix, false);
-        int textLength = UninterruptibleUtils.String.modifiedUTF8Length(text, false);
-        assert prefixLength < OBJECT_DESCRIPTION_MAX_LENGTH - 3;
+        int prefixLength = UninterruptibleUtils.String.utf8Length(prefix, false);
+        assert prefixLength < OBJECT_DESCRIPTION_MAX_LENGTH - ELLIPSIS_LENGTH;
 
-        boolean tooLong = false;
-        int totalLength = prefixLength + textLength;
-        if (totalLength > OBJECT_DESCRIPTION_MAX_LENGTH) {
-            totalLength = OBJECT_DESCRIPTION_MAX_LENGTH;
-            textLength = OBJECT_DESCRIPTION_MAX_LENGTH - prefixLength - 3;
-            tooLong = true;
+        int textLength = UninterruptibleUtils.String.utf8Length(text, false);
+        int maxTextLength = OBJECT_DESCRIPTION_MAX_LENGTH - prefixLength;
+        boolean tooLong = textLength > maxTextLength;
+        int maxEncodedTextLength = tooLong ? maxTextLength - ELLIPSIS_LENGTH : maxTextLength;
+
+        Pointer pos = UninterruptibleUtils.String.toUTF8(prefix, buffer, bufferEnd, false);
+        int encodedTextLength = 0;
+        for (int index = 0; index < text.length();) {
+            int codePoint = UninterruptibleUtils.String.codePointAt(text, index);
+            int byteLength = UninterruptibleUtils.String.utf8Length(codePoint);
+            int remaining = maxEncodedTextLength - encodedTextLength;
+            if (remaining < byteLength) {
+                break;
+            }
+            pos = UninterruptibleUtils.String.writeUTF8(pos, codePoint);
+            index += UninterruptibleUtils.String.charCount(codePoint);
+            encodedTextLength += byteLength;
         }
-
-        Pointer pos = UninterruptibleUtils.String.toModifiedUTF8(prefix, buffer, bufferEnd, false);
-        pos = UninterruptibleUtils.String.toModifiedUTF8(text, textLength, pos, bufferEnd, false, null);
 
         if (tooLong) {
             pos.writeByte(0, (byte) '.');
             pos.writeByte(1, (byte) '.');
             pos.writeByte(2, (byte) '.');
+            encodedTextLength += ELLIPSIS_LENGTH;
         }
 
-        JfrNativeEventWriter.putString(data, buffer, totalLength);
+        JfrNativeEventWriter.putString(data, buffer, prefixLength + encodedTextLength);
     }
 
     @Override

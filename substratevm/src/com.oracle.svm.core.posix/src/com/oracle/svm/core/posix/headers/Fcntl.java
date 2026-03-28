@@ -27,7 +27,7 @@ package com.oracle.svm.core.posix.headers;
 import static org.graalvm.nativeimage.c.function.CFunction.Transition.NO_TRANSITION;
 
 import com.oracle.svm.core.headers.LibC;
-import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;

@@ -26,7 +26,7 @@ package com.oracle.svm.core.jfr;
 
 import static com.oracle.svm.core.jfr.JfrThreadLocal.getJavaBufferList;
 import static com.oracle.svm.core.jfr.JfrThreadLocal.getNativeBufferList;
-import static com.oracle.svm.guest.staging.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.nativeimage.IsolateThread;
@@ -56,7 +56,7 @@ import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.thread.VMOperationControl;
 import com.oracle.svm.core.thread.VMThreads;
 import com.oracle.svm.core.UnmanagedMemoryUtil;
-import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 
 import jdk.graal.compiler.core.common.NumUtil;
 
@@ -85,6 +85,12 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
     private final VMMutex lock;
     private final JfrGlobalMemory globalMemory;
     private final JfrMetadata metadata;
+    private final JfrStackTraceRepository stackTraceRepo;
+    private final JfrMethodRepository methodRepo;
+    private final JfrTypeRepository typeRepo;
+    private final JfrSymbolRepository symbolRepo;
+    private final JfrThreadRepository threadRepo;
+    private final JfrOldObjectRepository oldObjectRepo;
     private final JfrRepository[] flushCheckpointRepos;
     private final JfrRepository[] threadCheckpointRepos;
     private final boolean compressedInts;
@@ -108,6 +114,12 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         this.lock = new VMMutex("jfrChunkWriter");
         this.globalMemory = globalMemory;
         this.metadata = new JfrMetadata(null);
+        this.stackTraceRepo = stackTraceRepo;
+        this.methodRepo = methodRepo;
+        this.typeRepo = typeRepo;
+        this.symbolRepo = symbolRepo;
+        this.threadRepo = threadRepo;
+        this.oldObjectRepo = oldObjectRepo;
         this.compressedInts = true;
         this.epochChangeOp = new JfrChangeEpochOperation();
 
@@ -241,11 +253,11 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         /*
          * After changing the epoch, all subsequently triggered JFR events will be recorded into the
          * data structures of the new epoch. This guarantees that the data in the old epoch can be
-         * persisted to a file without a safepoint.
+         * persisted to a file without an additional safepoint.
          */
 
-        writeThreadCheckpoint(false);
-        writeFlushCheckpoint(false);
+        writePreviousEpochThreadCheckpoint();
+        writePreviousEpochFlushCheckpoint();
         writeMetadataEvent();
         patchFileHeader(false);
 
@@ -321,6 +333,33 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         writeCheckpointEvent(JfrCheckpointType.Flush, flushCheckpointRepos, newChunk, flushpoint);
     }
 
+    private void writePreviousEpochFlushCheckpoint() {
+        long start = beginEvent();
+        writeCompressedLong(JfrReservedEvent.CHECKPOINT.getId());
+        writeCompressedLong(JfrTicks.elapsedTicks());
+        writeCompressedLong(0); // duration
+        writeCompressedLong(getDeltaToLastCheckpoint(start));
+        writeByte(JfrCheckpointType.Flush.getId());
+
+        long poolCountPos = getFileSupport().position(fd);
+        getFileSupport().writeInt(fd, 0); // pool count (patched below)
+
+        int poolCount = newChunk ? writeSerializers() : 0;
+        poolCount += stackTraceRepo.write(this, false);
+        poolCount += methodRepo.write(this, false);
+        poolCount += oldObjectRepo.write(this, false);
+        poolCount += typeRepo.writePreviousEpoch(this);
+        poolCount += symbolRepo.write(this, false);
+
+        long currentPos = getFileSupport().position(fd);
+        getFileSupport().seek(fd, poolCountPos);
+        writePaddedInt(poolCount);
+        getFileSupport().seek(fd, currentPos);
+        endEvent(start);
+
+        lastCheckpointOffset = start;
+    }
+
     private void writeThreadCheckpoint(boolean flushpoint) {
         assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
         /* The code below is only atomic enough because the epoch can't change while flushing. */
@@ -329,6 +368,33 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         } else if (!flushpoint) {
             /* After an epoch change, the previous epoch data must be completely clear. */
             SubstrateJVM.getThreadRepo().clearPreviousEpoch();
+        }
+    }
+
+    private void writePreviousEpochThreadCheckpoint() {
+        assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
+        if (threadRepo.hasUnflushedData()) {
+            long start = beginEvent();
+            writeCompressedLong(JfrReservedEvent.CHECKPOINT.getId());
+            writeCompressedLong(JfrTicks.elapsedTicks());
+            writeCompressedLong(0); // duration
+            writeCompressedLong(getDeltaToLastCheckpoint(start));
+            writeByte(JfrCheckpointType.Threads.getId());
+
+            long poolCountPos = getFileSupport().position(fd);
+            getFileSupport().writeInt(fd, 0); // pool count (patched below)
+
+            int poolCount = threadRepo.write(this, false);
+
+            long currentPos = getFileSupport().position(fd);
+            getFileSupport().seek(fd, poolCountPos);
+            writePaddedInt(poolCount);
+            getFileSupport().seek(fd, currentPos);
+            endEvent(start);
+
+            lastCheckpointOffset = start;
+        } else {
+            threadRepo.clearPreviousEpoch();
         }
     }
 
@@ -377,7 +443,11 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
     private int writeConstantPools(JfrRepository[] repositories, boolean flushpoint) {
         int poolCount = 0;
         for (JfrRepository repo : repositories) {
-            poolCount += repo.write(this, flushpoint);
+            if (!flushpoint && repo instanceof JfrTypeRepository jfrTypeRepository) {
+                poolCount += jfrTypeRepository.writePreviousEpoch(this);
+            } else {
+                poolCount += repo.write(this, flushpoint);
+            }
         }
         return poolCount;
     }
@@ -534,7 +604,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         } else {
             getFileSupport().writeByte(fd, StringEncoding.UTF8_BYTE_ARRAY.getValue());
 
-            int length = UninterruptibleUtils.String.modifiedUTF8Length(str, false);
+            int length = UninterruptibleUtils.String.utf8Length(str, false);
             writeCompressedInt(length);
             int bufferSize = 64;
             Pointer buffer = StackValue.get(bufferSize);
@@ -545,14 +615,14 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
                 // Fill up the buffer as much as possible
                 Pointer pos = buffer;
                 while (charsWritten < str.length()) {
-                    char ch = UninterruptibleUtils.String.charAt(str, charsWritten);
-                    int nextCharSize = UninterruptibleUtils.String.modifiedUTF8Length(ch);
+                    int codePoint = UninterruptibleUtils.String.codePointAt(str, charsWritten);
+                    int nextCharSize = UninterruptibleUtils.String.utf8Length(codePoint);
                     if (pos.add(nextCharSize).aboveThan(bufferEnd)) {
                         // buffer is too full to add the next char
                         break;
                     }
-                    pos = UninterruptibleUtils.String.writeModifiedUTF8(pos, ch);
-                    charsWritten++;
+                    pos = UninterruptibleUtils.String.writeUTF8(pos, codePoint);
+                    charsWritten += UninterruptibleUtils.String.charCount(codePoint);
                 }
                 // Write the contents of the buffer to disk
                 UnsignedWord bytesToDisk = pos.subtract(buffer);
@@ -670,6 +740,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         @Override
         protected void operate(NativeVMOperationData d) {
             changeEpoch();
+            SubstrateJVM.getTypeRepository().preparePreviousEpochSnapshot();
         }
 
         /**

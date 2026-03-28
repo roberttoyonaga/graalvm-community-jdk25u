@@ -26,6 +26,7 @@
 
 package com.oracle.svm.test.jfr;
 
+import com.oracle.svm.core.jfr.JfrEvent;
 import com.oracle.svm.test.jfr.events.StringEvent;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
@@ -39,6 +40,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.SubstrateJVM;
 
 /**
@@ -47,14 +49,22 @@ import com.oracle.svm.core.jfr.SubstrateJVM;
  * correctly along with in-flight data.
  */
 public class TestEmergencyDump extends JfrRecordingTest {
+    private static final String STRING_EVENT_NAME = "com.jfr.String";
+    private static final String OUT_OF_MEMORY_REASON = "Out of Memory";
+
     @Test
     public void test() throws Throwable {
+        if (!HasJfrSupport.get()) {
+            /* Prevent that the code below is reachable on platforms that don't support JFR. */
+            return;
+        }
+
         List<String> expectedStrings = new ArrayList<>();
         expectedStrings.add("first");
-        expectedStrings.add("second");
-        expectedStrings.add("third");
+        expectedStrings.add("second\0nul");
+        expectedStrings.add("third \uD83D\uDE80");
 
-        String[] testedEvents = new String[]{"com.jfr.String"};
+        String[] testedEvents = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
         Recording recording = startRecording(testedEvents);
         // This event will be in chunk #1 in disk repository.
         StringEvent e1 = new StringEvent();
@@ -86,8 +96,15 @@ public class TestEmergencyDump extends JfrRecordingTest {
         assertTrue("emergency dump file does not exist.", Files.exists(p));
         List<RecordedEvent> events = getEvents(Path.of(dumpFile), testedEvents, true);
         for (RecordedEvent event : events) {
-            assertTrue(expectedStrings.remove(event.getString("message")));
+            if (STRING_EVENT_NAME.equals(event.getEventType().getName())) {
+                assertTrue(expectedStrings.remove(event.getString("message")));
+            } else {
+                assertEquals(JfrEvent.DumpReason.getName(), event.getEventType().getName());
+                assertEquals(OUT_OF_MEMORY_REASON, event.getString("reason"));
+                assertEquals(-1, event.getInt("recordingId"));
+            }
         }
+        assertEquals(4, events.size());
         assertEquals(0, expectedStrings.size());
 
         Files.deleteIfExists(p);

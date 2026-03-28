@@ -53,7 +53,7 @@ import com.oracle.svm.core.sampler.SubstrateSigprofHandler;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.thread.JavaVMOperation;
 import com.oracle.svm.core.thread.VMThreads;
-import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
 import com.oracle.svm.shared.singletons.traits.BuiltinTraits.PartiallyLayerAware;
@@ -84,7 +84,7 @@ import jdk.jfr.internal.LogTag;
  */
 @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = PartiallyLayerAware.class)
 public class SubstrateJVM {
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+13/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L569") //
+    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jvmci-25.1-b16/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L569") //
     private static final String OUT_OF_MEMORY = "Out of Memory";
     private final List<Configuration> knownConfigurations;
     private final JfrOptionSet options;
@@ -757,8 +757,8 @@ public class SubstrateJVM {
         return DynamicHub.fromClass(eventClass).getJfrEventConfiguration();
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L559-L572")
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26%2B3/src/hotspot/share/jfr/recorder/service/jfrRecorderService.cpp#L510-L526")
+    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jvmci-25.1-b16/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L559-L572")
+    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jvmci-25.1-b16/src/hotspot/share/jfr/recorder/service/jfrRecorderService.cpp#L510-L526")
     @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Used on OOME for emergency dumps")
     public void vmOutOfMemoryErrorRotation() {
         if (!recording || !JfrEmergencyDumpSupport.isPresent()) {

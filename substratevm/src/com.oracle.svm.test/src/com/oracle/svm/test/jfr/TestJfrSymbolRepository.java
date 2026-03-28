@@ -28,9 +28,10 @@ package com.oracle.svm.test.jfr;
 
 import jdk.jfr.Recording;
 import org.junit.Test;
+import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.JfrSymbolRepository;
 import com.oracle.svm.core.jfr.SubstrateJVM;
-import com.oracle.svm.guest.staging.Uninterruptible;
+import com.oracle.svm.shared.Uninterruptible;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -38,26 +39,57 @@ import static org.junit.Assert.assertNotEquals;
 public class TestJfrSymbolRepository extends JfrRecordingTest {
     @Test
     public void test() throws Throwable {
+        if (!HasJfrSupport.get()) {
+            /* Prevent that the code below is reachable on platforms that don't support JFR. */
+            return;
+        }
+
         // Ensure JFR is created in case this is the first test to run
         String[] events = new String[]{};
         Recording recording = startRecording(events);
-        stopRecording(recording, null);
+        try {
+            JfrSymbolRepository repo = SubstrateJVM.getSymbolRepository();
 
-        String str1 = "string1";
-        String str1copy = "string1";
-        String str2 = "string2";
-
-        JfrSymbolRepository repo = SubstrateJVM.getSymbolRepository();
-
-        long id1 = getSymbolId(repo, str1);
-        long id2 = getSymbolId(repo, str2);
-        long id1copy = getSymbolId(repo, str1copy);
-        assertEquals(id1, id1copy);
-        assertNotEquals(id1, id2);
+            assertLookupInvariants(repo);
+            recording.dump(createTempJfrFile());
+            assertLookupInvariants(repo);
+        } finally {
+            stopRecording(recording, null);
+        }
     }
 
     @Uninterruptible(reason = "Needed for JfrSymbolRepository.getSymbolId().")
     private static long getSymbolId(JfrSymbolRepository repo, String str) {
         return repo.getSymbolId(str, false);
+    }
+
+    private static void assertLookupInvariants(JfrSymbolRepository repo) {
+        long id1 = getSymbolId(repo, "string1");
+        long id2 = getSymbolId(repo, "string2");
+        long id1copy = getSymbolId(repo, "string1");
+        long empty1 = getSymbolId(repo, "");
+        long empty2 = getSymbolId(repo, "");
+        long embeddedNul1 = getSymbolId(repo, "embedded\0nul");
+        long embeddedNul2 = getSymbolId(repo, "embedded\0nul");
+        long emoji1 = getSymbolId(repo, "rocket \uD83D\uDE80");
+        long emoji2 = getSymbolId(repo, "rocket \uD83D\uDE80");
+        long nullId = getSymbolId(repo, null);
+
+        assertNotEquals(0, id1);
+        assertNotEquals(0, id2);
+        assertEquals(id1, id1copy);
+        assertNotEquals(id1, id2);
+        assertNotEquals(0, empty1);
+        assertEquals(empty1, empty2);
+        assertNotEquals(0, embeddedNul1);
+        assertEquals(embeddedNul1, embeddedNul2);
+        assertNotEquals(id1, embeddedNul1);
+        assertNotEquals(id2, embeddedNul1);
+        assertNotEquals(0, emoji1);
+        assertEquals(emoji1, emoji2);
+        assertNotEquals(id1, emoji1);
+        assertNotEquals(id2, emoji1);
+        assertNotEquals(embeddedNul1, emoji1);
+        assertEquals(0, nullId);
     }
 }
