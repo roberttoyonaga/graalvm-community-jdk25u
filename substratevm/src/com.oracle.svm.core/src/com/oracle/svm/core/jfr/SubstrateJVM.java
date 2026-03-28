@@ -103,6 +103,7 @@ public class SubstrateJVM {
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final JfrRecorderThread recorderThread;
     private final JfrOldObjectProfiler oldObjectProfiler;
+    private final JfrEndRecordingOperation endRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;
@@ -140,6 +141,7 @@ public class SubstrateJVM {
         unlockedChunkWriter = writeFile ? new JfrChunkFileWriter(globalMemory, stackTraceRepo, methodRepo, typeRepo, symbolRepo, threadRepo, oldObjectRepo) : new JfrChunkNoWriter();
         recorderThread = new JfrRecorderThread(globalMemory, unlockedChunkWriter);
         oldObjectProfiler = new JfrOldObjectProfiler();
+        endRecordingOperation = new JfrEndRecordingOperation();
 
         jfrLogging = new JfrLogging();
         eventThrottler = new JfrEventThrottling();
@@ -374,6 +376,10 @@ public class SubstrateJVM {
         }
 
         recorderThread.endRecording();
+    }
+
+    void enqueueEndRecordingOperation() {
+        endRecordingOperation.enqueue();
     }
 
     /**
@@ -781,6 +787,13 @@ public class SubstrateJVM {
                 chunkWriter.markChunkFinal();
                 chunkWriter.closeFile();
             }
+            /*
+             * The emergency dump is a terminal snapshot for the current native recording state. If
+             * we returned with recording still enabled, later stop/close operations could emit
+             * additional JFR data into buffers without any open chunk file and leak that stale data
+             * into subsequent chunks or recordings.
+             */
+            enqueueEndRecordingOperation();
             JfrEmergencyDumpSupport.singleton().onVmError();
         } finally {
             chunkWriter.unlock();

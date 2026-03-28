@@ -73,18 +73,11 @@ public class TestEmergencyDumpMetadataOnly extends JfrRecordingTest {
             assertEquals(-1, dumpReason.getInt("recordingId"));
         } finally {
             Files.deleteIfExists(dumpFile);
-            cleanupInFlightData();
+            assertNoResidualTestedEvents(events);
         }
     }
 
     private static Path getEmergencyDumpFile() {
         return Path.of("svm_oom_pid_" + ProcessHandle.current().pid() + ".jfr");
-    }
-
-    private static void cleanupInFlightData() {
-        Recording cleanup = new Recording();
-        cleanup.start();
-        cleanup.stop();
-        cleanup.close();
     }
 }

@@ -94,7 +94,7 @@ public class TestEmergencyDumpConstantPool extends JfrRecordingTest {
             assertEquals(0, expectedClasses.size());
         } finally {
             Files.deleteIfExists(dumpFile);
-            cleanupInFlightData();
+            assertNoResidualTestedEvents(events);
         }
     }
 
@@ -107,14 +107,6 @@ public class TestEmergencyDumpConstantPool extends JfrRecordingTest {
     private static Path getEmergencyDumpFile() {
         return Path.of("svm_oom_pid_" + ProcessHandle.current().pid() + ".jfr");
     }
-
-    private static void cleanupInFlightData() {
-        Recording cleanup = new Recording();
-        cleanup.start();
-        cleanup.stop();
-        cleanup.close();
-    }
-
     private static final class EmergencyDumpHelper {
     }
 
