@@ -103,7 +103,12 @@ public class SubstrateJVM {
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final JfrRecorderThread recorderThread;
     private final JfrOldObjectProfiler oldObjectProfiler;
-    private JfrEndRecordingOperation endRecordingOperation;
+    /*
+     * This operation is initialized only once the runtime is up, after the SubstrateJVM singleton
+     * itself has already been published. Keep the reference volatile so threads that later stop a
+     * recording cannot observe the pre-initialization null value.
+     */
+    private volatile JfrEndRecordingOperation endRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;
@@ -259,7 +264,6 @@ public class SubstrateJVM {
         unlockedChunkWriter.initialize(options.maxChunkSize.getValue());
         stackTraceRepo.setStackTraceDepth(NumUtil.safeToInt(options.stackDepth.getValue()));
 
-        recorderThread.start();
         /*
          * Preallocate the stop-recording VM operation while the runtime is healthy, so the
          * emergency-dump path does not need to allocate it after an OOM. This must not happen in
@@ -267,6 +271,7 @@ public class SubstrateJVM {
          * accessors.
          */
         endRecordingOperation = new JfrEndRecordingOperation();
+        recorderThread.start();
 
         initialized = true;
         return true;
