@@ -26,6 +26,7 @@ package com.oracle.svm.core.jfr;
 
 import java.util.List;
 
+import com.oracle.svm.core.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.os.RawFileOperationSupport;
 import com.oracle.svm.core.os.RawFileOperationSupport.RawFileDescriptor;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -36,6 +37,7 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.heap.RestrictHeapAccess;
+import com.oracle.svm.core.heap.UnknownObjectField;
 import com.oracle.svm.core.heap.VMOperationInfos;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.jfr.events.JfrAllocationEvents;
@@ -106,8 +108,10 @@ public class SubstrateJVM {
     /*
      * This operation is initialized only once the runtime is up, after the SubstrateJVM singleton
      * itself has already been published. Keep the reference volatile so threads that later stop a
-     * recording cannot observe the pre-initialization null value.
+     * recording cannot observe the pre-initialization null value. Mark the field as unknown during
+     * image building because the runtime only populates it after compilation saw the initial null.
      */
+    @UnknownObjectField(canBeNull = true, types = JfrEndRecordingOperation.class, availability = AfterCompilation.class)
     private volatile JfrEndRecordingOperation endRecordingOperation;
 
     private final JfrLogging jfrLogging;
