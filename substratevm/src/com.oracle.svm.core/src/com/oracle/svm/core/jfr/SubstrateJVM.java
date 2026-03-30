@@ -110,7 +110,7 @@ public class SubstrateJVM {
      * Regular Recording.stop() calls still allocate a fresh operation because a JavaVMOperation
      * instance may only be enqueued once at a time, and stop() can race the emergency enqueue.
      */
-    @UnknownObjectField(canBeNull = true, types = JfrEndRecordingOperation.class, availability = AfterCompilation.class) private volatile JfrEndRecordingOperation emergencyEndRecordingOperation;
+    @UnknownObjectField(canBeNull = true, types = JfrEmergencyEndRecordingOperation.class, availability = AfterCompilation.class) private volatile JfrEmergencyEndRecordingOperation emergencyEndRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;
@@ -274,7 +274,7 @@ public class SubstrateJVM {
          * the hosted constructor because JavaVMOperation initialization touches runtime-only random
          * accessors.
          */
-        emergencyEndRecordingOperation = new JfrEndRecordingOperation();
+        emergencyEndRecordingOperation = new JfrEmergencyEndRecordingOperation();
         recorderThread.start();
 
         initialized = true;
@@ -365,8 +365,8 @@ public class SubstrateJVM {
          * recording, wait until that cleanup completed so no stale repository state can leak into
          * the new chunk.
          */
-        if (emergencyRecordingCleanupPending) {
-            recorderThread.endRecording();
+        while (emergencyRecordingCleanupPending) {
+            Thread.yield();
         }
         if (recording) {
             return;
@@ -393,12 +393,9 @@ public class SubstrateJVM {
      * See {@link JVM#endRecording}.
      */
     public void endRecording() {
-        /*
-         * Emergency dumps enqueue the native end-recording operation directly from a no-allocation
-         * path and may therefore flip the recording flag before the Java-side Recording.stop()
-         * callback arrives here. We still need the recorder-thread barrier in that case so no stale
-         * recorder work survives into the next recording.
-         */
+        if (!recording) {
+            return;
+        }
         recorderThread.endRecording();
     }
 
@@ -904,6 +901,43 @@ public class SubstrateJVM {
             SubstrateJVM.getOldObjectRepository().reset();
             SubstrateJVM.getOldObjectProfiler().teardown();
             SubstrateJVM.get().emergencyRecordingCleanupPending = false;
+        }
+    }
+
+    private class JfrEmergencyEndRecordingOperation extends JavaVMOperation {
+        JfrEmergencyEndRecordingOperation() {
+            super(VMOperationInfos.get(JfrEmergencyEndRecordingOperation.class, "JFR emergency end recording", SystemEffect.SAFEPOINT));
+        }
+
+        @Override
+        protected void operate() {
+            if (!recording) {
+                emergencyRecordingCleanupPending = false;
+                return;
+            }
+            recording = false;
+            JfrExecutionSampler.singleton().update();
+
+            /*
+             * The emergency dump file was already finalized, so this cleanup only needs to discard
+             * stale in-memory state before the next recording can start.
+             */
+            for (IsolateThread isolateThread = VMThreads.firstThread(); isolateThread.isNonNull(); isolateThread = VMThreads.nextThread(isolateThread)) {
+                JfrThreadLocal.stopRecordingAfterEmergencyDump(isolateThread, false, samplerBufferPool);
+            }
+            SamplerBuffersAccess.releaseFullBuffers(samplerBufferPool);
+
+            threadLocal.teardown();
+            samplerBufferPool.teardown();
+            globalMemory.clear();
+            threadRepo.reset();
+            stackTraceRepo.reset();
+            methodRepo.reset();
+            typeRepo.reset();
+            symbolRepo.reset();
+            oldObjectRepo.reset();
+            oldObjectProfiler.teardown();
+            emergencyRecordingCleanupPending = false;
         }
     }
 
