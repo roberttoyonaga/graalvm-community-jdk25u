@@ -570,6 +570,15 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
             pathBufferInitialized = false;
         }
     }
+
+    public static class TestingBackdoor {
+        public static long getPathBufferAddress(PosixJfrEmergencyDumpSupport support) {
+            if (support.pathBufferInitialized == false) {
+                return 0L;
+            }
+            return support.pathBuffer.rawValue();
+        }
+    }
 }
 
 @AutomaticallyRegisteredFeature
