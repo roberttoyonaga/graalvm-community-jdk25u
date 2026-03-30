@@ -106,13 +106,11 @@ public class SubstrateJVM {
     private final JfrRecorderThread recorderThread;
     private final JfrOldObjectProfiler oldObjectProfiler;
     /*
-     * This operation is initialized only once the runtime is up, after the SubstrateJVM singleton
-     * itself has already been published. Keep the reference volatile so threads that later stop a
-     * recording cannot observe the pre-initialization null value. Mark the field as unknown during
-     * image building because the runtime only populates it after compilation saw the initial null.
+     * Emergency dumps must not allocate, so they need a preallocated end-recording VM operation.
+     * Regular Recording.stop() calls still allocate a fresh operation because a JavaVMOperation
+     * instance may only be enqueued once at a time, and stop() can race the emergency enqueue.
      */
-    @UnknownObjectField(canBeNull = true, types = JfrEndRecordingOperation.class, availability = AfterCompilation.class)
-    private volatile JfrEndRecordingOperation endRecordingOperation;
+    @UnknownObjectField(canBeNull = true, types = JfrEndRecordingOperation.class, availability = AfterCompilation.class) private volatile JfrEndRecordingOperation emergencyEndRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;
@@ -124,6 +122,7 @@ public class SubstrateJVM {
      * in).
      */
     private volatile boolean recording;
+    private volatile boolean emergencyRecordingCleanupPending;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public SubstrateJVM(List<Configuration> configurations, boolean writeFile) {
@@ -155,6 +154,7 @@ public class SubstrateJVM {
 
         initialized = false;
         recording = false;
+        emergencyRecordingCleanupPending = false;
     }
 
     @Fold
@@ -274,7 +274,7 @@ public class SubstrateJVM {
          * the hosted constructor because JavaVMOperation initialization touches runtime-only random
          * accessors.
          */
-        endRecordingOperation = new JfrEndRecordingOperation();
+        emergencyEndRecordingOperation = new JfrEndRecordingOperation();
         recorderThread.start();
 
         initialized = true;
@@ -360,6 +360,14 @@ public class SubstrateJVM {
      * See {@link JVM#beginRecording}.
      */
     public void beginRecording() {
+        /*
+         * Emergency dumps end the native recording asynchronously. Before starting a fresh
+         * recording, wait until that cleanup completed so no stale repository state can leak into
+         * the new chunk.
+         */
+        if (emergencyRecordingCleanupPending) {
+            recorderThread.endRecording();
+        }
         if (recording) {
             return;
         }
@@ -385,15 +393,22 @@ public class SubstrateJVM {
      * See {@link JVM#endRecording}.
      */
     public void endRecording() {
-        if (!recording) {
-            return;
-        }
-
+        /*
+         * Emergency dumps enqueue the native end-recording operation directly from a no-allocation
+         * path and may therefore flip the recording flag before the Java-side Recording.stop()
+         * callback arrives here. We still need the recorder-thread barrier in that case so no stale
+         * recorder work survives into the next recording.
+         */
         recorderThread.endRecording();
     }
 
-    void enqueueEndRecordingOperation() {
-        endRecordingOperation.enqueue();
+    void enqueueRegularEndRecordingOperation() {
+        new JfrEndRecordingOperation().enqueue();
+    }
+
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Used on OOME for emergency dumps")
+    void enqueueEmergencyEndRecordingOperation() {
+        emergencyEndRecordingOperation.enqueue();
     }
 
     /**
@@ -664,6 +679,15 @@ public class SubstrateJVM {
      * See {@link JVM#emitOldObjectSamples(long, boolean, boolean)}.
      */
     void emitOldObjectSamples(long cutoff, boolean emitAll, boolean skipBFS) {
+        /*
+         * The emergency-dump path emits old-object samples and then ends the native recording
+         * eagerly. The Java-side Recording object still transitions through stop/close afterward
+         * and will try to emit old-object samples again, so this hook must tolerate already-ended
+         * recordings.
+         */
+        if (!recording) {
+            return;
+        }
         oldObjectProfiler.emit(cutoff, emitAll, skipBFS);
     }
 
@@ -807,11 +831,12 @@ public class SubstrateJVM {
              * additional JFR data into buffers without any open chunk file and leak that stale data
              * into subsequent chunks or recordings.
              */
-            enqueueEndRecordingOperation();
-            JfrEmergencyDumpSupport.singleton().onVmError();
+            emergencyRecordingCleanupPending = true;
+            enqueueEmergencyEndRecordingOperation();
         } finally {
             chunkWriter.unlock();
         }
+        JfrEmergencyDumpSupport.singleton().onVmError();
 
     }
 
@@ -846,6 +871,7 @@ public class SubstrateJVM {
         @Override
         protected void operate() {
             if (!SubstrateJVM.get().recording) {
+                SubstrateJVM.get().emergencyRecordingCleanupPending = false;
                 return;
             }
             SubstrateJVM.get().recording = false;
@@ -870,7 +896,14 @@ public class SubstrateJVM {
             SubstrateJVM.getThreadLocal().teardown();
             SubstrateJVM.getSamplerBufferPool().teardown();
             SubstrateJVM.getGlobalMemory().clear();
+            SubstrateJVM.getThreadRepo().reset();
+            SubstrateJVM.getStackTraceRepo().reset();
+            SubstrateJVM.getMethodRepo().reset();
+            SubstrateJVM.getTypeRepository().reset();
+            SubstrateJVM.getSymbolRepository().reset();
+            SubstrateJVM.getOldObjectRepository().reset();
             SubstrateJVM.getOldObjectProfiler().teardown();
+            SubstrateJVM.get().emergencyRecordingCleanupPending = false;
         }
     }
 

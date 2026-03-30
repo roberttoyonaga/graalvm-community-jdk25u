@@ -110,6 +110,19 @@ public class JfrTypeRepository implements JfrRepository {
         flushedPackages.teardown();
     }
 
+    public void reset() {
+        flushedClasses.clear();
+        flushedModules.clear();
+        flushedClassLoaders.clear();
+        flushedPackages.clear();
+        previousEpochSnapshot.reset();
+        currentPackageId = 0;
+        currentModuleId = 0;
+        currentClassLoaderId = 0;
+        epochTypeData0.clear();
+        epochTypeData1.clear();
+    }
+
     @Uninterruptible(reason = "Result is only valid until epoch changes.")
     private JfrClassInfoTable getEpochData(boolean previousEpoch) {
         boolean epoch = previousEpoch ? JfrTraceIdEpoch.getInstance().previousEpoch() : JfrTraceIdEpoch.getInstance().currentEpoch();
@@ -606,12 +619,13 @@ public class JfrTypeRepository implements JfrRepository {
         objectIdEntry.setHash(getObjectHash(classLoader));
         ObjectIdEntry existing = (ObjectIdEntry) snapshot.classLoaderIds.get(objectIdEntry);
         if (existing.isNonNull()) {
+            ensureClassLoaderClassTraceId(snapshot, classLoader, existing.getId());
             return existing.getId();
         }
 
         SnapshotClassLoaderEntry classLoaderEntry = StackValue.get(SnapshotClassLoaderEntry.class);
         classLoaderEntry.setId(++currentClassLoaderId);
-        classLoaderEntry.setClassTraceId(JfrTraceId.getTraceId(classLoader.getClass()));
+        classLoaderEntry.setClassTraceId(0L);
         classLoaderEntry.setNameSymbolId(storePreviousEpochSymbol(classLoader.getName(), false));
         classLoaderEntry.setHash(getIdHash(classLoaderEntry.getId()));
         if (snapshot.classLoaders.putNew(classLoaderEntry).isNull()) {
@@ -625,7 +639,45 @@ public class JfrTypeRepository implements JfrRepository {
             currentClassLoaderId--;
             return 0;
         }
+        ensureClassLoaderClassTraceId(snapshot, classLoader, classLoaderEntry.getId());
         return classLoaderEntry.getId();
+    }
+
+    private void ensureClassLoaderClassTraceId(PreviousEpochTypeSnapshot snapshot, ClassLoader classLoader, long classLoaderId) {
+        Class<?> classLoaderClass = classLoader.getClass();
+        if (!canReferenceClass(snapshot, classLoaderClass)) {
+            /*
+             * The class loader entry may be created before its implementation class is added to the
+             * previous-epoch class pool. Reserve the loader id first so recursive loader lookups
+             * can see it, then materialize the class if possible. If that still fails under memory
+             * pressure, leave the class reference empty rather than writing a dangling class id.
+             */
+            visitClass(snapshot, classLoaderClass);
+        }
+
+        SnapshotClassLoaderEntry entry = getSnapshotClassLoaderEntry(snapshot, classLoaderId);
+        if (entry.isNonNull()) {
+            entry.setClassTraceId(canReferenceClass(snapshot, classLoaderClass) ? JfrTraceId.getTraceId(classLoaderClass) : 0L);
+        }
+    }
+
+    private static boolean canReferenceClass(PreviousEpochTypeSnapshot snapshot, Class<?> clazz) {
+        return clazz != null && snapshotContainsClass(snapshot, clazz);
+    }
+
+    private static boolean snapshotContainsClass(PreviousEpochTypeSnapshot snapshot, Class<?> clazz) {
+        long classId = JfrTraceId.getTraceId(clazz);
+        SnapshotClassEntry classEntry = StackValue.get(SnapshotClassEntry.class);
+        classEntry.setClassId(classId);
+        classEntry.setHash(getIdHash(classId));
+        return snapshot.classes.contains(classEntry);
+    }
+
+    private static SnapshotClassLoaderEntry getSnapshotClassLoaderEntry(PreviousEpochTypeSnapshot snapshot, long classLoaderId) {
+        SnapshotClassLoaderEntry classLoaderEntry = StackValue.get(SnapshotClassLoaderEntry.class);
+        classLoaderEntry.setId(classLoaderId);
+        classLoaderEntry.setHash(getIdHash(classLoaderId));
+        return (SnapshotClassLoaderEntry) snapshot.classLoaders.get(classLoaderEntry);
     }
 
     private long getModuleId(PreviousEpochTypeSnapshot snapshot, Module module) {

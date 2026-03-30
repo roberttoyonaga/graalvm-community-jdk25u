@@ -71,6 +71,11 @@ public final class JfrThreadRepository implements JfrRepository {
         epochData1.teardown();
     }
 
+    public void reset() {
+        epochData0.clear(false);
+        epochData1.clear(false);
+    }
+
     @Uninterruptible(reason = "Required to get epoch data.")
     public void clearPreviousEpoch() {
         assert VMOperation.isInProgressAtSafepoint() && SubstrateJVM.getChunkWriter().isLockedByCurrentThread();

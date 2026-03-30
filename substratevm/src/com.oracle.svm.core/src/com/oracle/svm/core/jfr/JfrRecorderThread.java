@@ -113,7 +113,7 @@ public class JfrRecorderThread extends Thread {
     void endRecording() {
         lock.lock();
         try {
-            SubstrateJVM.get().enqueueEndRecordingOperation();
+            SubstrateJVM.get().enqueueRegularEndRecordingOperation();
         } finally {
             lock.unlock();
         }

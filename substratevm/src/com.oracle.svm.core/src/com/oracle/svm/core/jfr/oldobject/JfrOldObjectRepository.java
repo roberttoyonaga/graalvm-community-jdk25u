@@ -67,6 +67,11 @@ public final class JfrOldObjectRepository implements JfrRepository {
         epochData1.teardown();
     }
 
+    public void reset() {
+        epochData0.clear(false);
+        epochData1.clear(false);
+    }
+
     @Uninterruptible(reason = "Locking without transition and result is only valid until epoch changes. Accesses a native JFR buffer.", callerMustBe = true)
     public long serializeOldObject(Object obj) {
         mutex.lockNoTransition();
