@@ -86,6 +86,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     private RawFileDescriptor emergencyFd;
     private CCharPointer pathBuffer;
     private boolean pathBufferInitialized;
+    private int emergencyChunkPathCallCount;
     private String openFileWarning;
     private String openDirectoryWarning;
 
@@ -96,7 +97,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     @Override
     public void initialize() {
         savePid();
-        if (pathBufferInitialized == false) {
+        if (!pathBufferInitialized) {
             pathBuffer = NativeMemory.calloc(JVM_MAXPATHLEN + 1, NmtCategory.JFR);
             pathBufferInitialized = true;
         }
@@ -190,6 +191,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
      */
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L418-L431")
     private RawFileDescriptor createEmergencyChunkPath() {
+        emergencyChunkPathCallCount++;
         if (isRepositoryLocationTooLong(repositoryLocationBytes)) {
             return Word.nullPointer();
         }
@@ -200,7 +202,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         idx = writeToPathBuffer(EMERGENCY_CHUNK_BYTES, idx);
         idx = writeToPathBuffer(CHUNKFILE_EXTENSION_BYTES, idx);
         getPathBuffer().write(idx++, (byte) 0);
-        return getFileSupport().create(getPathBuffer(), FileCreationMode.CREATE, FileAccessMode.READ_WRITE);
+        return getFileSupport().create(getPathBuffer(), FileCreationMode.CREATE_OR_REPLACE, FileAccessMode.READ_WRITE);
     }
 
     @Override
@@ -318,6 +320,17 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     static int compare(Word a, Word b) {
         CCharPointer filenameA = (CCharPointer) ((Pointer) a);
         CCharPointer filenameB = (CCharPointer) ((Pointer) b);
+        int lengthA = (int) SubstrateUtil.strlen(filenameA).rawValue();
+        int lengthB = (int) SubstrateUtil.strlen(filenameB).rawValue();
+        boolean emergencyChunkA = isEmergencyChunkFilename(filenameA, lengthA);
+        boolean emergencyChunkB = isEmergencyChunkFilename(filenameB, lengthB);
+        if (emergencyChunkA || emergencyChunkB) {
+            if (emergencyChunkA && emergencyChunkB) {
+                return 0;
+            }
+            return emergencyChunkA ? 1 : -1;
+        }
+
         int cmp = LibC.strncmp(filenameA, filenameB, Word.unsigned(ISO_8601_LEN));
         if (cmp == 0) {
             CCharPointer aDot = SubstrateUtil.strchr(filenameA, DOT);
@@ -459,8 +472,9 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
                 return false;
             }
         }
+        boolean emergencyChunk = isEmergencyChunkFilename(fn, filenameLength);
         // Only merge normal repository chunk names, not arbitrary *.jfr files dropped beside them.
-        if (!hasChunkFilenameFormat(fn, filenameLength - CHUNKFILE_EXTENSION_BYTES.length)) {
+        if (!emergencyChunk && !hasChunkFilenameFormat(fn, filenameLength - CHUNKFILE_EXTENSION_BYTES.length)) {
             return false;
         }
 
@@ -484,6 +498,24 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         getFileSupport().close(chunkFd);
         if (chunkFileSize < CHUNK_FILE_HEADER_SIZE) {
             return false;
+        }
+        return true;
+    }
+
+    private static boolean isEmergencyChunkFilename(CCharPointer fn, int filenameLength) {
+        int expectedLength = EMERGENCY_CHUNK_BYTES.length + CHUNKFILE_EXTENSION_BYTES.length;
+        if (filenameLength != expectedLength) {
+            return false;
+        }
+        for (int i = 0; i < EMERGENCY_CHUNK_BYTES.length; i++) {
+            if (fn.read(i) != EMERGENCY_CHUNK_BYTES[i]) {
+                return false;
+            }
+        }
+        for (int i = 0; i < CHUNKFILE_EXTENSION_BYTES.length; i++) {
+            if (fn.read(EMERGENCY_CHUNK_BYTES.length + i) != CHUNKFILE_EXTENSION_BYTES[i]) {
+                return false;
+            }
         }
         return true;
     }
@@ -573,10 +605,18 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
 
     public static class TestingBackdoor {
         public static long getPathBufferAddress(PosixJfrEmergencyDumpSupport support) {
-            if (support.pathBufferInitialized == false) {
+            if (!support.pathBufferInitialized) {
                 return 0L;
             }
             return support.pathBuffer.rawValue();
+        }
+
+        public static int getEmergencyChunkPathCallCount(PosixJfrEmergencyDumpSupport support) {
+            return support.emergencyChunkPathCallCount;
+        }
+
+        public static void resetEmergencyChunkPathCallCount(PosixJfrEmergencyDumpSupport support) {
+            support.emergencyChunkPathCallCount = 0;
         }
     }
 }
