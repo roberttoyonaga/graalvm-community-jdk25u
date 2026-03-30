@@ -85,6 +85,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     private byte[] cwdBytes;
     private RawFileDescriptor emergencyFd;
     private CCharPointer pathBuffer;
+    private boolean pathBufferInitialized;
     private String openFileWarning;
     private String openDirectoryWarning;
 
@@ -95,7 +96,10 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     @Override
     public void initialize() {
         savePid();
-        pathBuffer = NativeMemory.calloc(JVM_MAXPATHLEN + 1, NmtCategory.JFR);
+        if (pathBufferInitialized == false) {
+            pathBuffer = NativeMemory.calloc(JVM_MAXPATHLEN + 1, NmtCategory.JFR);
+            pathBufferInitialized = true;
+        }
         directory = Word.nullPointer();
         directoryFd = -1;
         saveCwd();
@@ -561,7 +565,10 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     public void teardown() {
         closeEmergencyDumpFile();
         closeDirectory();
-        NativeMemory.free(pathBuffer);
+        if (pathBufferInitialized) {
+            NativeMemory.free(pathBuffer);
+            pathBufferInitialized = false;
+        }
     }
 }
 
