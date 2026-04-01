@@ -128,15 +128,15 @@ public final class JfrOldObjectRepository implements JfrRepository {
         Pointer buffer = UnsafeStackValue.get(OBJECT_DESCRIPTION_MAX_LENGTH);
         Pointer bufferEnd = buffer.add(OBJECT_DESCRIPTION_MAX_LENGTH);
 
-        int prefixLength = UninterruptibleUtils.String.utf8Length(prefix, false);
+        int prefixLength = UninterruptibleUtils.String.utf8Length(prefix);
         assert prefixLength < OBJECT_DESCRIPTION_MAX_LENGTH - ELLIPSIS_LENGTH;
 
-        int textLength = UninterruptibleUtils.String.utf8Length(text, false);
+        int textLength = UninterruptibleUtils.String.utf8Length(text);
         int maxTextLength = OBJECT_DESCRIPTION_MAX_LENGTH - prefixLength;
         boolean tooLong = textLength > maxTextLength;
         int maxEncodedTextLength = tooLong ? maxTextLength - ELLIPSIS_LENGTH : maxTextLength;
 
-        Pointer pos = UninterruptibleUtils.String.toUTF8(prefix, buffer, bufferEnd, false);
+        Pointer pos = UninterruptibleUtils.String.toUTF8(prefix, buffer, bufferEnd);
         int encodedTextLength = 0;
         for (int index = 0; index < text.length();) {
             int codePoint = UninterruptibleUtils.String.codePointAt(text, index);

@@ -737,12 +737,12 @@ public class UninterruptibleUtils {
          * Gets the length of {@code string} when encoded using UTF-8.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int utf8Length(java.lang.String string, boolean addNullTerminator) {
-            return utf8Length(string, addNullTerminator, null);
+        public static int utf8Length(java.lang.String string) {
+            return utf8Length(string, null);
         }
 
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int utf8Length(java.lang.String string, boolean addNullTerminator, CharReplacer replacer) {
+        public static int utf8Length(java.lang.String string, CharReplacer replacer) {
             int result = 0;
             for (int index = 0; index < string.length();) {
                 char ch = charAt(string, index);
@@ -763,8 +763,7 @@ public class UninterruptibleUtils {
                 result += utf8Length(ch);
                 index++;
             }
-
-            return result + (addNullTerminator ? 1 : 0);
+            return result;
         }
 
         /**
@@ -809,17 +808,17 @@ public class UninterruptibleUtils {
          * @return pointer on new position in buffer.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static Pointer toUTF8(java.lang.String string, Pointer buffer, Pointer bufferEnd, boolean addNullTerminator) {
-            return toUTF8(string, buffer, bufferEnd, addNullTerminator, null);
+        public static Pointer toUTF8(java.lang.String string, Pointer buffer, Pointer bufferEnd) {
+            return toUTF8(string, buffer, bufferEnd, null);
         }
 
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static Pointer toUTF8(java.lang.String string, Pointer buffer, Pointer bufferEnd, boolean addNullTerminator, CharReplacer replacer) {
-            return toUTF8(string, string.length(), buffer, bufferEnd, addNullTerminator, replacer);
+        public static Pointer toUTF8(java.lang.String string, Pointer buffer, Pointer bufferEnd, CharReplacer replacer) {
+            return toUTF8(string, string.length(), buffer, bufferEnd, replacer);
         }
 
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static Pointer toUTF8(java.lang.String string, int stringLength, Pointer buffer, Pointer bufferEnd, boolean addNullTerminator, CharReplacer replacer) {
+        public static Pointer toUTF8(java.lang.String string, int stringLength, Pointer buffer, Pointer bufferEnd, CharReplacer replacer) {
             Pointer pos = buffer;
             for (int index = 0; index < stringLength;) {
                 char ch = charAt(string, index);
@@ -839,11 +838,6 @@ public class UninterruptibleUtils {
                 }
                 pos = writeUTF8(pos, ch);
                 index++;
-            }
-
-            if (addNullTerminator) {
-                pos.writeByte(0, (byte) 0);
-                pos = pos.add(1);
             }
             VMError.guarantee(pos.belowOrEqual(bufferEnd), "Must not write out of bounds.");
             return pos;

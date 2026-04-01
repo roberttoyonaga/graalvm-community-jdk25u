@@ -604,7 +604,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         } else {
             getFileSupport().writeByte(fd, StringEncoding.UTF8_BYTE_ARRAY.getValue());
 
-            int length = UninterruptibleUtils.String.utf8Length(str, false);
+            int length = UninterruptibleUtils.String.utf8Length(str);
             writeCompressedInt(length);
             int bufferSize = 64;
             Pointer buffer = StackValue.get(bufferSize);
