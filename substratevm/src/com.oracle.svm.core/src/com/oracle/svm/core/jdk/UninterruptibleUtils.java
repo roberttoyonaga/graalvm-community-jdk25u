@@ -584,31 +584,16 @@ public class UninterruptibleUtils {
          * Gets the number of bytes for a char in modified UTF8 format.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int modifiedUTF8Length(char c) {
-            if (c >= 0x0001 && c <= 0x007F) {
-                // ASCII character.
-                return 1;
-            } else {
-                if (c <= 0x07FF) {
-                    return 2;
-                } else {
-                    return 3;
-                }
-            }
+        private static int modifiedUTF8Length(char c) {
+            return c == 0 ? 2 : utf8Length(c);
         }
 
         /**
          * Gets the number of bytes for a char in UTF-8 format.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int utf8Length(char c) {
-            if (c <= 0x007F) {
-                return 1;
-            } else if (c <= 0x07FF) {
-                return 2;
-            } else {
-                return 3;
-            }
+        private static int utf8Length(char c) {
+            return utf8Length((int) c);
         }
 
         /**
@@ -627,25 +612,25 @@ public class UninterruptibleUtils {
             }
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+13/src/java.base/share/classes/java/lang/Character.java#L9460-L9463")
+        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9462-L9464")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static boolean isHighSurrogate(char ch) {
+        private static boolean isHighSurrogate(char ch) {
             return ch >= Character.MIN_HIGH_SURROGATE && ch < (Character.MAX_HIGH_SURROGATE + 1);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+13/src/java.base/share/classes/java/lang/Character.java#L9484-L9486")
+        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9486-L9487")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static boolean isLowSurrogate(char ch) {
+        private static boolean isLowSurrogate(char ch) {
             return ch >= Character.MIN_LOW_SURROGATE && ch < (Character.MAX_LOW_SURROGATE + 1);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+13/src/java.base/share/classes/java/lang/Character.java#L9566-L9574")
+        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9568-L9575")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int toCodePoint(char high, char low) {
+        private static int toCodePoint(char high, char low) {
             return ((high << 10) + low) + (Character.MIN_SUPPLEMENTARY_CODE_POINT - (Character.MIN_HIGH_SURROGATE << 10) - Character.MIN_LOW_SURROGATE);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+13/src/java.base/share/classes/java/lang/Character.java#L9550-L9552")
+        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9552-L9553")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         public static int charCount(int codePoint) {
             return codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT ? 2 : 1;
@@ -655,7 +640,7 @@ public class UninterruptibleUtils {
          * Write a char in modified UTF8 format into the buffer.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static Pointer writeModifiedUTF8(Pointer buffer, char c) {
+        private static Pointer writeModifiedUTF8(Pointer buffer, char c) {
             Pointer pos = buffer;
             if (c >= 0x0001 && c <= 0x007F) {
                 pos.writeByte(0, (byte) c);
@@ -677,7 +662,7 @@ public class UninterruptibleUtils {
          * Write a char in UTF-8 format into the buffer.
          */
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static Pointer writeUTF8(Pointer buffer, char c) {
+        private static Pointer writeUTF8(Pointer buffer, char c) {
             return writeUTF8(buffer, (int) c);
         }
 

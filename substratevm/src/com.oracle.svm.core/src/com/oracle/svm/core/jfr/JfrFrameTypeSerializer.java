@@ -36,17 +36,15 @@ public class JfrFrameTypeSerializer implements JfrSerializer {
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrFrameTypeSerializer() {
         frameTypes = JfrFrameType.values();
-
     }
 
     @Override
     public void write(JfrChunkWriter writer) {
         writer.writeCompressedLong(JfrType.FrameType.getId());
         writer.writeCompressedLong(frameTypes.length);
-        // noinspection ForLoopReplaceableByForEach: must be allocation free.
-        for (int i = 0; i < frameTypes.length; i++) {
-            writer.writeCompressedLong(frameTypes[i].getId());
-            writer.writeString(frameTypes[i].getText());
+        for (JfrFrameType frameType : frameTypes) {
+            writer.writeCompressedLong(frameType.getId());
+            writer.writeString(frameType.getText());
         }
     }
 }

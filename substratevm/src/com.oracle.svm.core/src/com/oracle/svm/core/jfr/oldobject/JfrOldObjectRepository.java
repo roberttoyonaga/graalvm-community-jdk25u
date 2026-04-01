@@ -49,7 +49,8 @@ import com.oracle.svm.shared.Uninterruptible;
 
 public final class JfrOldObjectRepository implements JfrRepository {
     private static final int OBJECT_DESCRIPTION_MAX_LENGTH = 100;
-    private static final int ELLIPSIS_LENGTH = 3;
+    private static final String ELLIPSIS = "...";
+    private static final int ELLIPSIS_LENGTH = UninterruptibleUtils.String.utf8Length(ELLIPSIS);
 
     private final VMMutex mutex;
     private final JfrOldObjectEpochData epochData0;
@@ -151,9 +152,7 @@ public final class JfrOldObjectRepository implements JfrRepository {
         }
 
         if (tooLong) {
-            pos.writeByte(0, (byte) '.');
-            pos.writeByte(1, (byte) '.');
-            pos.writeByte(2, (byte) '.');
+            pos = UninterruptibleUtils.String.toUTF8(ELLIPSIS, pos, bufferEnd);
             encodedTextLength += ELLIPSIS_LENGTH;
         }
 

@@ -158,8 +158,6 @@ public class JfrThreadLocal implements ThreadListener {
 
     @Uninterruptible(reason = "Accesses various JFR buffers.")
     public static void stopRecording(IsolateThread isolateThread, boolean freeJavaBuffer) {
-        SamplerBufferPool samplerBufferPool = SubstrateJVM.getSamplerBufferPool();
-
         /* Flush event buffers. From this point onwards, no further JFR events may be emitted. */
         JfrBuffer nb = nativeBuffer.get(isolateThread);
         nativeBuffer.set(isolateThread, Word.nullPointer());
@@ -187,7 +185,7 @@ public class JfrThreadLocal implements ThreadListener {
 
         SamplerBuffer buffer = samplerBuffer.get(isolateThread);
         if (buffer.isNonNull()) {
-            samplerBufferPool.pushFullBuffer(buffer);
+            SubstrateJVM.getSamplerBufferPool().pushFullBuffer(buffer);
             samplerBuffer.set(isolateThread, Word.nullPointer());
         }
     }
