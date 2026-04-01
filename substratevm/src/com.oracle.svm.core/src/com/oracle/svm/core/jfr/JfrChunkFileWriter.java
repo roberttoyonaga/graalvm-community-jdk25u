@@ -257,7 +257,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
          */
 
         writePreviousEpochThreadCheckpoint();
-        writePreviousEpochFlushCheckpoint();
+        writeFlushCheckpoint(false);
         writeMetadataEvent();
         patchFileHeader(false);
 
@@ -333,33 +333,6 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         writeCheckpointEvent(JfrCheckpointType.Flush, flushCheckpointRepos, newChunk, flushpoint);
     }
 
-    private void writePreviousEpochFlushCheckpoint() {
-        long start = beginEvent();
-        writeCompressedLong(JfrReservedEvent.CHECKPOINT.getId());
-        writeCompressedLong(JfrTicks.elapsedTicks());
-        writeCompressedLong(0); // duration
-        writeCompressedLong(getDeltaToLastCheckpoint(start));
-        writeByte(JfrCheckpointType.Flush.getId());
-
-        long poolCountPos = getFileSupport().position(fd);
-        getFileSupport().writeInt(fd, 0); // pool count (patched below)
-
-        int poolCount = newChunk ? writeSerializers() : 0;
-        poolCount += stackTraceRepo.write(this, false);
-        poolCount += methodRepo.write(this, false);
-        poolCount += oldObjectRepo.write(this, false);
-        poolCount += typeRepo.writePreviousEpoch(this);
-        poolCount += symbolRepo.write(this, false);
-
-        long currentPos = getFileSupport().position(fd);
-        getFileSupport().seek(fd, poolCountPos);
-        writePaddedInt(poolCount);
-        getFileSupport().seek(fd, currentPos);
-        endEvent(start);
-
-        lastCheckpointOffset = start;
-    }
-
     private void writeThreadCheckpoint(boolean flushpoint) {
         assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
         /* The code below is only atomic enough because the epoch can't change while flushing. */
@@ -373,26 +346,8 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
 
     private void writePreviousEpochThreadCheckpoint() {
         assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
-        if (threadRepo.hasUnflushedData()) {
-            long start = beginEvent();
-            writeCompressedLong(JfrReservedEvent.CHECKPOINT.getId());
-            writeCompressedLong(JfrTicks.elapsedTicks());
-            writeCompressedLong(0); // duration
-            writeCompressedLong(getDeltaToLastCheckpoint(start));
-            writeByte(JfrCheckpointType.Threads.getId());
-
-            long poolCountPos = getFileSupport().position(fd);
-            getFileSupport().writeInt(fd, 0); // pool count (patched below)
-
-            int poolCount = threadRepo.write(this, false);
-
-            long currentPos = getFileSupport().position(fd);
-            getFileSupport().seek(fd, poolCountPos);
-            writePaddedInt(poolCount);
-            getFileSupport().seek(fd, currentPos);
-            endEvent(start);
-
-            lastCheckpointOffset = start;
+        if (threadRepo.hasUnflushedPreviousEpochData()) {
+            writeCheckpointEvent(JfrCheckpointType.Threads, threadCheckpointRepos, false, false);
         } else {
             threadRepo.clearPreviousEpoch();
         }

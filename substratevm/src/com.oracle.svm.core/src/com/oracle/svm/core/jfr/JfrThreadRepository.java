@@ -244,6 +244,17 @@ public final class JfrThreadRepository implements JfrRepository {
         }
     }
 
+    @Uninterruptible(reason = "Locking without transition requires that the whole critical section is uninterruptible.")
+    public boolean hasUnflushedPreviousEpochData() {
+        mutex.lockNoTransition();
+        try {
+            JfrThreadEpochData epochData = getEpochData(true);
+            return epochData.unflushedThreadCount > 0 || epochData.unflushedThreadGroupCount > 0;
+        } finally {
+            mutex.unlock();
+        }
+    }
+
     @Override
     @Uninterruptible(reason = "Locking without transition requires that the whole critical section is uninterruptible.")
     public int write(JfrChunkWriter writer, boolean flushpoint) {
