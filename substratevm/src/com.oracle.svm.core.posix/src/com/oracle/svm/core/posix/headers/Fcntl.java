@@ -63,9 +63,6 @@ public class Fcntl {
     @CConstant
     public static native int O_EXCL();
 
-    @CConstant
-    public static native int AT_SYMLINK_NOFOLLOW();
-
     public static class NoTransitions {
         @CFunction(value = "openSII", transition = NO_TRANSITION)
         public static native int open(CCharPointer pathname, int flags, int mode);

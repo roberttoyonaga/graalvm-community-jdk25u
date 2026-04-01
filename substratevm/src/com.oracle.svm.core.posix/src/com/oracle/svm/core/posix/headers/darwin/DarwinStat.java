@@ -69,25 +69,6 @@ public class DarwinStat {
         }
     }
 
-    @CFunction("fstatat$INODE64")
-    @Platforms(Platform.DARWIN_AMD64.class)
-    private static native int fstatat_amd64(int fd, @CConst CCharPointer path, stat buf, int flag);
-
-    @CFunction("fstatat")
-    @Platforms(Platform.DARWIN_AARCH64.class)
-    private static native int fstatat_aarch64(int fd, @CConst CCharPointer path, stat buf, int flag);
-
-    @Platforms(Platform.DARWIN.class)
-    public static int fstatat(int fd, @CConst CCharPointer path, stat buf, int flag) {
-        if (Platform.includedIn(Platform.AMD64.class)) {
-            return fstatat_amd64(fd, path, buf, flag);
-        } else if (Platform.includedIn(Platform.AARCH64.class)) {
-            return fstatat_aarch64(fd, path, buf, flag);
-        } else {
-            throw VMError.unsupportedPlatform(); // ExcludeFromJacocoGeneratedReport
-        }
-    }
-
     public static class NoTransitions {
         @CFunction(value = "fstat$INODE64", transition = CFunction.Transition.NO_TRANSITION)
         @Platforms(Platform.DARWIN_AMD64.class)
@@ -104,26 +85,6 @@ public class DarwinStat {
                 return fstat_amd64(fd, buf);
             } else if (Platform.includedIn(Platform.AARCH64.class)) {
                 return fstat_aarch64(fd, buf);
-            } else {
-                throw VMError.unsupportedPlatform(); // ExcludeFromJacocoGeneratedReport
-            }
-        }
-
-        @CFunction(value = "fstatat$INODE64", transition = CFunction.Transition.NO_TRANSITION)
-        @Platforms(Platform.DARWIN_AMD64.class)
-        private static native int fstatat_amd64(int fd, @CConst CCharPointer path, stat buf, int flag);
-
-        @CFunction(value = "fstatat", transition = CFunction.Transition.NO_TRANSITION)
-        @Platforms(Platform.DARWIN_AARCH64.class)
-        private static native int fstatat_aarch64(int fd, @CConst CCharPointer path, stat buf, int flag);
-
-        @Platforms(Platform.DARWIN.class)
-        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int fstatat(int fd, @CConst CCharPointer path, stat buf, int flag) {
-            if (Platform.includedIn(Platform.AMD64.class)) {
-                return fstatat_amd64(fd, path, buf, flag);
-            } else if (Platform.includedIn(Platform.AARCH64.class)) {
-                return fstatat_aarch64(fd, path, buf, flag);
             } else {
                 throw VMError.unsupportedPlatform(); // ExcludeFromJacocoGeneratedReport
             }

@@ -29,7 +29,6 @@ package com.oracle.svm.core.posix.jfr;
 import com.oracle.svm.core.VMInspectionOptions;
 import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.nmt.NmtCategory;
-import com.oracle.svm.core.posix.PosixStat;
 import com.oracle.svm.core.posix.headers.Dirent;
 import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.Fcntl;
@@ -60,7 +59,6 @@ import com.oracle.svm.shared.util.SubstrateUtil;
 
 import java.nio.charset.StandardCharsets;
 
-import static com.oracle.svm.core.posix.headers.Fcntl.AT_SYMLINK_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_RDONLY;
 
@@ -453,9 +451,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
 
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L276-L308")
     private boolean filter(Dirent.dirent entry) {
-        if (entry.d_type() == (byte) Dirent.DT_LNK()) {
-            return false;
-        }
         CCharPointer fn = entry.d_name();
 
         // Check filename length
@@ -475,15 +470,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         boolean emergencyChunk = isEmergencyChunkFilename(fn, filenameLength);
         // Only merge normal repository chunk names, not arbitrary *.jfr files dropped beside them.
         if (!emergencyChunk && !hasChunkFilenameFormat(fn, filenameLength - CHUNKFILE_EXTENSION_BYTES.length)) {
-            return false;
-        }
-
-        if (directoryFd == -1) {
-            return false;
-        }
-
-        PosixStat.stat statBuffer = StackValue.get(PosixStat.sizeOfStatStruct());
-        if (PosixStat.restartableFstatat(directoryFd, fn, statBuffer, AT_SYMLINK_NOFOLLOW()) == -1 || PosixStat.S_ISLNK(statBuffer)) {
             return false;
         }
 

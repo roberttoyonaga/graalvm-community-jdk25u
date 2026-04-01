@@ -189,16 +189,6 @@ public final class PosixStat {
         return result;
     }
 
-    @Uninterruptible(reason = "LibC.errno() must not be overwritten accidentally.")
-    public static int restartableFstatat(int fd, CCharPointer path, PosixStat.stat buf, int flags) {
-        int result;
-        do {
-            result = PosixStat.NoTransitions.fstatat(fd, path, buf, flags);
-        } while (result == -1 && LibC.errno() == Errno.EINTR());
-
-        return result;
-    }
-
     @Platforms(Platform.HOSTED_ONLY.class)
     private PosixStat() {
     }
@@ -213,17 +203,6 @@ public final class PosixStat {
                 return LinuxStat.NoTransitions.fstat(fd, buf);
             } else if (Platform.includedIn(Platform.DARWIN.class)) {
                 return DarwinStat.NoTransitions.fstat(fd, buf);
-            } else {
-                throw VMError.shouldNotReachHere("Unsupported platform");
-            }
-        }
-
-        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-        public static int fstatat(int fd, CCharPointer path, stat buf, int flags) {
-            if (Platform.includedIn(Platform.LINUX.class)) {
-                return LinuxStat.NoTransitions.fstatat(fd, path, buf, flags);
-            } else if (Platform.includedIn(Platform.DARWIN.class)) {
-                return DarwinStat.NoTransitions.fstatat(fd, path, buf, flags);
             } else {
                 throw VMError.shouldNotReachHere("Unsupported platform");
             }
