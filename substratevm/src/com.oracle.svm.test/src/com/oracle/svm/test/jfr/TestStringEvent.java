@@ -27,7 +27,10 @@
 package com.oracle.svm.test.jfr;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.Test;
@@ -38,19 +41,30 @@ import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 
 public class TestStringEvent extends JfrRecordingTest {
+    private static final String MESSAGE = "modified-utf-event\0message \uD83D\uDE80";
+
     @Test
     public void test() throws Throwable {
         String[] events = new String[]{"com.jfr.String"};
-        Recording recording = startRecording(events);
+        Path path = createTempJfrFile();
+        Recording recording = startRecording(events, getDefaultConfiguration(), null, path);
 
         StringEvent event = new StringEvent();
-        event.message = "Event has been generated!";
+        event.message = MESSAGE;
         event.commit();
 
         stopRecording(recording, TestStringEvent::validateEvents);
+        assertModifiedUTF8Encoding(path);
     }
 
     private static void validateEvents(List<RecordedEvent> events) {
         assertEquals(1, events.size());
+        assertEquals(MESSAGE, events.getFirst().getString("message"));
+    }
+
+    private static void assertModifiedUTF8Encoding(Path path) throws Exception {
+        byte[] fileBytes = Files.readAllBytes(path);
+        assertTrue("Recording file must contain the event payload encoded as modified UTF-8.",
+                        containsByteSequence(fileBytes, toModifiedUTF8Bytes(MESSAGE)));
     }
 }

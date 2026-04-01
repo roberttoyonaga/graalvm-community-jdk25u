@@ -26,6 +26,9 @@
 
 package com.oracle.svm.test.jfr;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import jdk.jfr.Recording;
 import org.junit.Test;
 import com.oracle.svm.core.jfr.HasJfrSupport;
@@ -35,8 +38,12 @@ import com.oracle.svm.shared.Uninterruptible;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 public class TestJfrSymbolRepository extends JfrRecordingTest {
+    private static final String EMBEDDED_NUL_SYMBOL = "modified-symbol\0encoding";
+    private static final String EMOJI_SYMBOL = "modified-symbol \uD83D\uDE80";
+
     @Test
     public void test() throws Throwable {
         if (!HasJfrSupport.get()) {
@@ -46,7 +53,8 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
 
         // Ensure JFR is created in case this is the first test to run
         String[] events = new String[]{};
-        Recording recording = startRecording(events);
+        Path path = createTempJfrFile();
+        Recording recording = startRecording(events, getDefaultConfiguration(), null, path);
         try {
             JfrSymbolRepository repo = SubstrateJVM.getSymbolRepository();
 
@@ -56,6 +64,9 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
         } finally {
             stopRecording(recording, null);
         }
+
+        assertSymbolUsesModifiedUTF8Encoding(path, EMBEDDED_NUL_SYMBOL);
+        assertSymbolUsesModifiedUTF8Encoding(path, EMOJI_SYMBOL);
     }
 
     @Uninterruptible(reason = "Needed for JfrSymbolRepository.getSymbolId().")
@@ -69,10 +80,10 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
         long id1copy = getSymbolId(repo, "string1");
         long empty1 = getSymbolId(repo, "");
         long empty2 = getSymbolId(repo, "");
-        long embeddedNul1 = getSymbolId(repo, "embedded\0nul");
-        long embeddedNul2 = getSymbolId(repo, "embedded\0nul");
-        long emoji1 = getSymbolId(repo, "rocket \uD83D\uDE80");
-        long emoji2 = getSymbolId(repo, "rocket \uD83D\uDE80");
+        long embeddedNul1 = getSymbolId(repo, EMBEDDED_NUL_SYMBOL);
+        long embeddedNul2 = getSymbolId(repo, EMBEDDED_NUL_SYMBOL);
+        long emoji1 = getSymbolId(repo, EMOJI_SYMBOL);
+        long emoji2 = getSymbolId(repo, EMOJI_SYMBOL);
         long nullId = getSymbolId(repo, null);
 
         assertNotEquals(0, id1);
@@ -91,5 +102,11 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
         assertNotEquals(id2, emoji1);
         assertNotEquals(embeddedNul1, emoji1);
         assertEquals(0, nullId);
+    }
+
+    private static void assertSymbolUsesModifiedUTF8Encoding(Path path, String symbol) throws Exception {
+        byte[] fileBytes = Files.readAllBytes(path);
+        assertTrue("Recording file must contain symbol data encoded as modified UTF-8: " + symbol,
+                        containsByteSequence(fileBytes, toModifiedUTF8Bytes(symbol)));
     }
 }
