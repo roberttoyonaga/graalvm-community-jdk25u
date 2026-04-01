@@ -85,12 +85,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
     private final VMMutex lock;
     private final JfrGlobalMemory globalMemory;
     private final JfrMetadata metadata;
-    private final JfrStackTraceRepository stackTraceRepo;
-    private final JfrMethodRepository methodRepo;
-    private final JfrTypeRepository typeRepo;
-    private final JfrSymbolRepository symbolRepo;
     private final JfrThreadRepository threadRepo;
-    private final JfrOldObjectRepository oldObjectRepo;
     private final JfrRepository[] flushCheckpointRepos;
     private final JfrRepository[] threadCheckpointRepos;
     private final boolean compressedInts;
@@ -114,12 +109,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         this.lock = new VMMutex("jfrChunkWriter");
         this.globalMemory = globalMemory;
         this.metadata = new JfrMetadata(null);
-        this.stackTraceRepo = stackTraceRepo;
-        this.methodRepo = methodRepo;
-        this.typeRepo = typeRepo;
-        this.symbolRepo = symbolRepo;
         this.threadRepo = threadRepo;
-        this.oldObjectRepo = oldObjectRepo;
         this.compressedInts = true;
         this.epochChangeOp = new JfrChangeEpochOperation();
 
