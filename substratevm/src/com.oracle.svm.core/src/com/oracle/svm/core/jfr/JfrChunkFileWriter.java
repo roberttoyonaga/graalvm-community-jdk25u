@@ -37,6 +37,7 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
+import com.oracle.svm.core.heap.RestrictHeapAccess;
 import com.oracle.svm.core.heap.VMOperationInfos;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
 import com.oracle.svm.core.jfr.oldobject.JfrOldObjectRepository;
@@ -85,9 +86,12 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
     private final VMMutex lock;
     private final JfrGlobalMemory globalMemory;
     private final JfrMetadata metadata;
+    private final JfrStackTraceRepository stackTraceRepo;
+    private final JfrMethodRepository methodRepo;
+    private final JfrTypeRepository typeRepo;
+    private final JfrSymbolRepository symbolRepo;
     private final JfrThreadRepository threadRepo;
-    private final JfrRepository[] flushCheckpointRepos;
-    private final JfrRepository[] threadCheckpointRepos;
+    private final JfrOldObjectRepository oldObjectRepo;
     private final boolean compressedInts;
 
     private long notificationThreshold;
@@ -109,17 +113,14 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         this.lock = new VMMutex("jfrChunkWriter");
         this.globalMemory = globalMemory;
         this.metadata = new JfrMetadata(null);
+        this.stackTraceRepo = stackTraceRepo;
+        this.methodRepo = methodRepo;
+        this.typeRepo = typeRepo;
+        this.symbolRepo = symbolRepo;
         this.threadRepo = threadRepo;
+        this.oldObjectRepo = oldObjectRepo;
         this.compressedInts = true;
         this.epochChangeOp = new JfrChangeEpochOperation();
-
-        /*
-         * Repositories earlier in the write order may reference entries of repositories later in
-         * the write order. This ordering is required to prevent races during flushing without
-         * changing epoch.
-         */
-        this.flushCheckpointRepos = new JfrRepository[]{stackTraceRepo, methodRepo, oldObjectRepo, typeRepo, symbolRepo};
-        this.threadCheckpointRepos = new JfrRepository[]{threadRepo};
     }
 
     @Override
@@ -211,8 +212,8 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
 
         flushStorage(true);
 
-        writeThreadCheckpoint(true);
-        writeFlushCheckpoint(true);
+        writeThreadCheckpoint();
+        writeFlushCheckpoint();
         writeMetadataEvent();
         patchFileHeader(true);
 
@@ -247,7 +248,7 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
          */
 
         writePreviousEpochThreadCheckpoint();
-        writeFlushCheckpoint(false);
+        writePreviousEpochFlushCheckpoint();
         writeMetadataEvent();
         patchFileHeader(false);
 
@@ -319,31 +320,54 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         return nextGeneration++;
     }
 
-    private void writeFlushCheckpoint(boolean flushpoint) {
-        writeCheckpointEvent(JfrCheckpointType.Flush, flushCheckpointRepos, newChunk, flushpoint);
+    private void writeFlushCheckpoint() {
+        long start = beginCheckpointEvent(JfrCheckpointType.Flush);
+        long poolCountPos = writeCheckpointPoolCountPlaceholder();
+        int poolCount = newChunk ? writeSerializers() : 0;
+        poolCount += stackTraceRepo.write(this, true);
+        poolCount += methodRepo.write(this, true);
+        poolCount += oldObjectRepo.write(this, true);
+        poolCount += typeRepo.write(this, true);
+        poolCount += symbolRepo.write(this, true);
+        endCheckpointEvent(start, poolCountPos, poolCount);
     }
 
-    private void writeThreadCheckpoint(boolean flushpoint) {
-        assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Used on OOME for emergency dumps")
+    private void writePreviousEpochFlushCheckpoint() {
+        long start = beginCheckpointEvent(JfrCheckpointType.Flush);
+        long poolCountPos = writeCheckpointPoolCountPlaceholder();
+        int poolCount = newChunk ? writeSerializers() : 0;
+        poolCount += stackTraceRepo.write(this, false);
+        poolCount += methodRepo.write(this, false);
+        poolCount += oldObjectRepo.write(this, false);
+        poolCount += typeRepo.writePreviousEpoch(this);
+        poolCount += symbolRepo.write(this, false);
+        endCheckpointEvent(start, poolCountPos, poolCount);
+    }
+
+    private void writeThreadCheckpoint() {
         /* The code below is only atomic enough because the epoch can't change while flushing. */
         if (SubstrateJVM.getThreadRepo().hasUnflushedData()) {
-            writeCheckpointEvent(JfrCheckpointType.Threads, threadCheckpointRepos, false, flushpoint);
-        } else if (!flushpoint) {
-            /* After an epoch change, the previous epoch data must be completely clear. */
-            SubstrateJVM.getThreadRepo().clearPreviousEpoch();
+            long start = beginCheckpointEvent(JfrCheckpointType.Threads);
+            long poolCountPos = writeCheckpointPoolCountPlaceholder();
+            int poolCount = threadRepo.write(this, true);
+            endCheckpointEvent(start, poolCountPos, poolCount);
         }
     }
 
+    @RestrictHeapAccess(access = RestrictHeapAccess.Access.NO_ALLOCATION, reason = "Used on OOME for emergency dumps")
     private void writePreviousEpochThreadCheckpoint() {
-        assert threadCheckpointRepos.length == 1 && threadCheckpointRepos[0] == SubstrateJVM.getThreadRepo();
         if (threadRepo.hasUnflushedPreviousEpochData()) {
-            writeCheckpointEvent(JfrCheckpointType.Threads, threadCheckpointRepos, false, false);
+            long start = beginCheckpointEvent(JfrCheckpointType.Threads);
+            long poolCountPos = writeCheckpointPoolCountPlaceholder();
+            int poolCount = threadRepo.write(this, false);
+            endCheckpointEvent(start, poolCountPos, poolCount);
         } else {
             threadRepo.clearPreviousEpoch();
         }
     }
 
-    private void writeCheckpointEvent(JfrCheckpointType type, JfrRepository[] repositories, boolean writeSerializers, boolean flushpoint) {
+    private long beginCheckpointEvent(JfrCheckpointType type) {
         assert lock.isOwner();
 
         long start = beginEvent();
@@ -352,12 +376,17 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
         writeCompressedLong(0); // duration
         writeCompressedLong(getDeltaToLastCheckpoint(start));
         writeByte(type.getId());
+        return start;
+    }
 
+    private long writeCheckpointPoolCountPlaceholder() {
         long poolCountPos = getFileSupport().position(fd);
-        getFileSupport().writeInt(fd, 0); // pool count (patched below)
+        getFileSupport().writeInt(fd, 0); // pool count (patched later)
+        return poolCountPos;
+    }
 
-        int poolCount = writeSerializers ? writeSerializers() : 0;
-        poolCount += writeConstantPools(repositories, flushpoint);
+    private void endCheckpointEvent(long start, long poolCountPos, int poolCount) {
+        assert lock.isOwner();
 
         long currentPos = getFileSupport().position(fd);
         getFileSupport().seek(fd, poolCountPos);
@@ -383,18 +412,6 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
             serializers[i].write(this);
         }
         return serializers.length;
-    }
-
-    private int writeConstantPools(JfrRepository[] repositories, boolean flushpoint) {
-        int poolCount = 0;
-        for (JfrRepository repo : repositories) {
-            if (!flushpoint && repo instanceof JfrTypeRepository jfrTypeRepository) {
-                poolCount += jfrTypeRepository.writePreviousEpoch(this);
-            } else {
-                poolCount += repo.write(this, flushpoint);
-            }
-        }
-        return poolCount;
     }
 
     @Override
