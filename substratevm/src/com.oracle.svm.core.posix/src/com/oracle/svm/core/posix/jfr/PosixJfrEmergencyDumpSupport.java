@@ -62,12 +62,11 @@ import java.nio.charset.StandardCharsets;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_RDONLY;
 
+@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp")
 public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.JfrEmergencyDumpSupport {
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L49") //
     private static final int CHUNK_FILE_HEADER_SIZE = 68;
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/os/posix/include/jvm_md.h#L57") //
     private static final int JVM_MAXPATHLEN = 4096;
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L47") //
     private static final int ISO_8601_LEN = 19;
     private static final byte FILE_SEPARATOR = '/';
     private static final byte DOT = '.';
@@ -165,7 +164,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
      * in the repository location.
      */
     @Override
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L433-L445")
     public RawFileDescriptor chunkPath() {
         if (repositoryLocationBytes == null) {
             if (!openEmergencyDumpFile()) {
@@ -187,7 +185,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
      * extension. In this case we just use a hardcoded string instead of date time, which will
      * successfully rank last in lexographic order among other chunkfile names.
      */
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L418-L431")
     private RawFileDescriptor createEmergencyChunkPath() {
         emergencyChunkPathCallCount++;
         if (isRepositoryLocationTooLong(repositoryLocationBytes)) {
@@ -204,7 +201,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
     }
 
     @Override
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L409-L416")
     public void onVmError() {
         if (repositoryLocationBytes == null) {
             return;
@@ -234,8 +230,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         }
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L131-L146")
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L86-L89")
     private boolean openEmergencyDumpFile() {
         if (getFileSupport().isValid(emergencyFd)) {
             return true;
@@ -259,7 +253,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         return getFileSupport().create(path, FileCreationMode.CREATE, FileAccessMode.READ_WRITE);
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L110-L129")
     private CCharPointer createEmergencyDumpPath() {
         int idx = 0;
         clearPathBuffer();
@@ -283,7 +276,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         return getPathBuffer();
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+3/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L310-L345")
     private void iterateRepository(GrowableWordArray gwa) {
         int count = 0;
         if (directory.isNull()) {
@@ -314,7 +306,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         }
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L191-L212")
     static int compare(Word a, Word b) {
         CCharPointer filenameA = (CCharPointer) ((Pointer) a);
         CCharPointer filenameB = (CCharPointer) ((Pointer) b);
@@ -449,7 +440,6 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         return result;
     }
 
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-26+2/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L276-L308")
     private boolean filter(Dirent.dirent entry) {
         CCharPointer fn = entry.d_name();
 

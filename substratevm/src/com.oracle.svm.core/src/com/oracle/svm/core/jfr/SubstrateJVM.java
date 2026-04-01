@@ -26,7 +26,6 @@ package com.oracle.svm.core.jfr;
 
 import java.util.List;
 
-import com.oracle.svm.core.BuildPhaseProvider.AfterCompilation;
 import com.oracle.svm.core.os.RawFileOperationSupport;
 import com.oracle.svm.core.os.RawFileOperationSupport.RawFileDescriptor;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -37,7 +36,6 @@ import org.graalvm.word.Pointer;
 import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.heap.RestrictHeapAccess;
-import com.oracle.svm.core.heap.UnknownObjectField;
 import com.oracle.svm.core.heap.VMOperationInfos;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.jfr.events.JfrAllocationEvents;
@@ -110,7 +108,7 @@ public class SubstrateJVM {
      * Regular Recording.stop() calls still allocate a fresh operation because a JavaVMOperation
      * instance may only be enqueued once at a time, and stop() can race the emergency enqueue.
      */
-    @UnknownObjectField(canBeNull = true, types = JfrEmergencyEndRecordingOperation.class, availability = AfterCompilation.class) private volatile JfrEmergencyEndRecordingOperation emergencyEndRecordingOperation;
+    private volatile JfrEmergencyEndRecordingOperation emergencyEndRecordingOperation;
 
     private final JfrLogging jfrLogging;
     private final JfrEventThrottling eventThrottler;

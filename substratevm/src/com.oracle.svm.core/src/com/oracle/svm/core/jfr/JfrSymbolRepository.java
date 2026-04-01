@@ -104,11 +104,11 @@ public class JfrSymbolRepository implements JfrRepository {
 
     @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     private static int getHash(Pointer buffer, UnsignedWord length) {
-        long sum = 0;
+        int hash = 0;
         for (int i = 0; length.aboveThan(i); i++) {
-            sum += buffer.readByte(i);
+            hash = 31 * hash + buffer.readByte(i);
         }
-        return UninterruptibleUtils.Long.hashCode(sum);
+        return hash;
     }
 
     @Uninterruptible(reason = "Locking without transition and result is only valid until epoch changes.", callerMustBe = true)
