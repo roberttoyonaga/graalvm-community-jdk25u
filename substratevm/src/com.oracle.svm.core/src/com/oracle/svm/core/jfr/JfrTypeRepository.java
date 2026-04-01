@@ -277,13 +277,18 @@ public class JfrTypeRepository implements JfrRepository {
 
     @Uninterruptible(reason = "Needed for JfrSymbolRepository.getSymbolId().")
     private long getSymbolId(JfrChunkWriter writer, String symbol, boolean flushpoint, boolean replaceDotWithSlash) {
+        assert writer.isLockedByCurrentThread();
+        return getSymbolId(symbol, !flushpoint, replaceDotWithSlash);
+    }
+
+    @Uninterruptible(reason = "Needed for JfrSymbolRepository.getSymbolId().")
+    private long getSymbolId(String symbol, boolean previousEpoch, boolean replaceDotWithSlash) {
         if (symbol == null) {
             return 0L;
         }
         int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
         if (encodedLength == 0) {
-            assert writer.isLockedByCurrentThread();
-            return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, !flushpoint);
+            return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, previousEpoch);
         }
 
         Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
@@ -291,17 +296,16 @@ public class JfrTypeRepository implements JfrRepository {
             return 0L;
         }
         UninterruptibleUtils.String.toModifiedUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
-        assert writer.isLockedByCurrentThread();
-        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), !flushpoint);
+        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), previousEpoch);
     }
 
     @Uninterruptible(reason = "Needed for OOME-safe symbol serialization.")
-    private static long storePreviousEpochSymbol(Pointer source, UnsignedWord length, boolean hasName) {
+    private static long getSymbolId(Pointer source, UnsignedWord length, boolean hasName, boolean previousEpoch) {
         if (!hasName) {
             return 0L;
         }
         if (length.equal(0)) {
-            return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, true);
+            return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, previousEpoch);
         }
 
         Pointer destination = NullableNativeMemory.malloc(length, NmtCategory.JFR);
@@ -309,25 +313,7 @@ public class JfrTypeRepository implements JfrRepository {
             return 0L;
         }
         UnmanagedMemoryUtil.copy(source, destination, length);
-        return SubstrateJVM.getSymbolRepository().getSymbolId(destination, length, true);
-    }
-
-    @Uninterruptible(reason = "Needed to precompute the previous-epoch symbol ids.")
-    private long storePreviousEpochSymbol(String symbol, boolean replaceDotWithSlash) {
-        if (symbol == null) {
-            return 0L;
-        }
-        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
-        if (encodedLength == 0) {
-            return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, true);
-        }
-
-        Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
-        if (buffer.isNull()) {
-            return 0L;
-        }
-        UninterruptibleUtils.String.toModifiedUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
-        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), true);
+        return SubstrateJVM.getSymbolRepository().getSymbolId(destination, length, previousEpoch);
     }
 
     private int writePackages(JfrChunkWriter writer, TypeInfo typeInfo, boolean flushpoint) {
@@ -599,7 +585,7 @@ public class JfrTypeRepository implements JfrRepository {
         }
 
         classEntry.setClassLoaderId(getClassLoaderId(snapshot, clazz.getClassLoader()));
-        classEntry.setNameSymbolId(storePreviousEpochSymbol(clazz.getName(), true));
+        classEntry.setNameSymbolId(getSymbolId(clazz.getName(), true, true));
         classEntry.setPackageId(getPackageId(snapshot, clazz));
         classEntry.setModifiers(clazz.getModifiers());
         classEntry.setHidden(clazz.isHidden());
@@ -624,7 +610,7 @@ public class JfrTypeRepository implements JfrRepository {
         SnapshotClassLoaderEntry classLoaderEntry = StackValue.get(SnapshotClassLoaderEntry.class);
         classLoaderEntry.setId(++currentClassLoaderId);
         classLoaderEntry.setClassTraceId(0L);
-        classLoaderEntry.setNameSymbolId(storePreviousEpochSymbol(classLoader.getName(), false));
+        classLoaderEntry.setNameSymbolId(getSymbolId(classLoader.getName(), true, false));
         classLoaderEntry.setHash(getIdHash(classLoaderEntry.getId()));
         if (snapshot.classLoaders.putNew(classLoaderEntry).isNull()) {
             currentClassLoaderId--;
@@ -694,7 +680,7 @@ public class JfrTypeRepository implements JfrRepository {
         SnapshotModuleEntry moduleEntry = StackValue.get(SnapshotModuleEntry.class);
         moduleEntry.setId(++currentModuleId);
         moduleEntry.setClassLoaderId(getClassLoaderId(snapshot, module.getClassLoader()));
-        moduleEntry.setNameSymbolId(storePreviousEpochSymbol(module.getName(), false));
+        moduleEntry.setNameSymbolId(getSymbolId(module.getName(), true, false));
         moduleEntry.setHash(getIdHash(moduleEntry.getId()));
         if (snapshot.modules.putNew(moduleEntry).isNull()) {
             currentModuleId--;
@@ -739,7 +725,7 @@ public class JfrTypeRepository implements JfrRepository {
         }
 
         packageEntry.setId(++currentPackageId);
-        packageEntry.setNameSymbolId(storePreviousEpochSymbol(packageEntry.getUtf8Name(), packageEntry.getNameLength(), packageEntry.getHasName()));
+        packageEntry.setNameSymbolId(getSymbolId(packageEntry.getUtf8Name(), packageEntry.getNameLength(), packageEntry.getHasName(), true));
         if (snapshot.packages.putNew(packageEntry).isNull()) {
             NullableNativeMemory.free(packageEntry.getUtf8Name());
             currentPackageId--;
@@ -926,7 +912,7 @@ public class JfrTypeRepository implements JfrRepository {
         void markBootstrapClassLoader() {
             hasBootstrapClassLoader = true;
             if (bootstrapNameSymbolId == 0L) {
-                bootstrapNameSymbolId = storePreviousEpochSymbol(BOOTSTRAP_NAME, false);
+                bootstrapNameSymbolId = getSymbolId(BOOTSTRAP_NAME, true, false);
             }
         }
     }
