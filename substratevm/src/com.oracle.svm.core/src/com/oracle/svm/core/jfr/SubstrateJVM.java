@@ -866,7 +866,6 @@ public class SubstrateJVM {
         @Override
         protected void operate() {
             if (!SubstrateJVM.get().recording) {
-                SubstrateJVM.get().emergencyRecordingCleanupPending = false;
                 return;
             }
             SubstrateJVM.get().recording = false;
@@ -910,7 +909,6 @@ public class SubstrateJVM {
         @Override
         protected void operate() {
             if (!recording) {
-                emergencyRecordingCleanupPending = false;
                 return;
             }
             recording = false;

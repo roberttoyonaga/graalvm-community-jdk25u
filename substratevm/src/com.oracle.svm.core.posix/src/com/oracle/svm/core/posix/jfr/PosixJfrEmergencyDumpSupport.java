@@ -314,6 +314,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
         boolean emergencyChunkA = isEmergencyChunkFilename(filenameA, lengthA);
         boolean emergencyChunkB = isEmergencyChunkFilename(filenameB, lengthB);
         if (emergencyChunkA || emergencyChunkB) {
+            assert !(emergencyChunkA && emergencyChunkB) : "repository must not contain multiple emergency chunk files";
             if (emergencyChunkA && emergencyChunkB) {
                 return 0;
             }
@@ -458,7 +459,7 @@ public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.Jfr
             }
         }
         boolean emergencyChunk = isEmergencyChunkFilename(fn, filenameLength);
-        // Only merge normal repository chunk names, not arbitrary *.jfr files dropped beside them.
+        // Merge timestamped repository chunks and the synthetic emergency repository chunk only.
         if (!emergencyChunk && !hasChunkFilenameFormat(fn, filenameLength - CHUNKFILE_EXTENSION_BYTES.length)) {
             return false;
         }

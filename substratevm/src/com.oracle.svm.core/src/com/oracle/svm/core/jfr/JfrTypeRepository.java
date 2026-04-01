@@ -172,9 +172,7 @@ public class JfrTypeRepository implements JfrRepository {
             return count;
         }
 
-        int count = writePreviousEpochSnapshot(writer);
-        clearEpochData();
-        return count;
+        return writePreviousEpoch(writer);
     }
 
     @RestrictHeapAccess(access = NO_ALLOCATION, reason = "Used on OOME for emergency dumps")
