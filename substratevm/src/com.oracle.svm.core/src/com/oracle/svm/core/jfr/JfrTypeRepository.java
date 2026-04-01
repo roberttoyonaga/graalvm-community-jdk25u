@@ -282,19 +282,19 @@ public class JfrTypeRepository implements JfrRepository {
         if (symbol == null) {
             return 0L;
         }
-        int utf8Length = UninterruptibleUtils.String.utf8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
-        if (utf8Length == 0) {
+        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
+        if (encodedLength == 0) {
             assert writer.isLockedByCurrentThread();
             return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, !flushpoint);
         }
 
-        Pointer buffer = NullableNativeMemory.malloc(utf8Length, NmtCategory.JFR);
+        Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
         if (buffer.isNull()) {
             return 0L;
         }
-        UninterruptibleUtils.String.toUTF8(symbol, symbol.length(), buffer, buffer.add(utf8Length), false, replaceDotWithSlash ? dotWithSlash : null);
+        UninterruptibleUtils.String.toModifiedUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
         assert writer.isLockedByCurrentThread();
-        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(utf8Length), !flushpoint);
+        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), !flushpoint);
     }
 
     @Uninterruptible(reason = "Needed for OOME-safe symbol serialization.")
@@ -319,17 +319,17 @@ public class JfrTypeRepository implements JfrRepository {
         if (symbol == null) {
             return 0L;
         }
-        int utf8Length = UninterruptibleUtils.String.utf8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
-        if (utf8Length == 0) {
+        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
+        if (encodedLength == 0) {
             return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, true);
         }
 
-        Pointer buffer = NullableNativeMemory.malloc(utf8Length, NmtCategory.JFR);
+        Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
         if (buffer.isNull()) {
             return 0L;
         }
-        UninterruptibleUtils.String.toUTF8(symbol, symbol.length(), buffer, buffer.add(utf8Length), false, replaceDotWithSlash ? dotWithSlash : null);
-        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(utf8Length), true);
+        UninterruptibleUtils.String.toModifiedUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
+        return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), true);
     }
 
     private int writePackages(JfrChunkWriter writer, TypeInfo typeInfo, boolean flushpoint) {
@@ -786,15 +786,15 @@ public class JfrTypeRepository implements JfrRepository {
             dot = 0;
         }
 
-        int utf8Length = UninterruptibleUtils.String.utf8Length(name, false, dotWithSlash);
-        if (utf8Length == 0) {
+        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(name, false, dotWithSlash);
+        if (encodedLength == 0) {
             target.setHasName(true);
             target.setUtf8Name(Word.nullPointer());
             target.setNameLength(Word.unsigned(0));
             return;
         }
 
-        Pointer buffer = NullableNativeMemory.malloc(utf8Length, NmtCategory.JFR);
+        Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
         if (buffer.isNull()) {
             target.setHasName(false);
             target.setUtf8Name(Word.nullPointer());
@@ -802,7 +802,7 @@ public class JfrTypeRepository implements JfrRepository {
             return;
         }
 
-        Pointer end = UninterruptibleUtils.String.toUTF8(name, dot, buffer, buffer.add(utf8Length), false, dotWithSlash);
+        Pointer end = UninterruptibleUtils.String.toModifiedUTF8(name, dot, buffer, buffer.add(encodedLength), false, dotWithSlash);
         target.setHasName(true);
         target.setUtf8Name(buffer);
         target.setNameLength(end.subtract(buffer));
@@ -816,22 +816,22 @@ public class JfrTypeRepository implements JfrRepository {
             return true;
         }
 
-        int utf8Length = UninterruptibleUtils.String.utf8Length(string, false, replaceDotWithSlash ? dotWithSlash : null);
+        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(string, false, replaceDotWithSlash ? dotWithSlash : null);
         target.setHasName(true);
-        target.setNameLength(Word.unsigned(utf8Length));
-        if (utf8Length == 0) {
+        target.setNameLength(Word.unsigned(encodedLength));
+        if (encodedLength == 0) {
             target.setUtf8Name(Word.nullPointer());
             return true;
         }
 
-        Pointer buffer = NullableNativeMemory.malloc(utf8Length, NmtCategory.JFR);
+        Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
         if (buffer.isNull()) {
             target.setHasName(false);
             target.setUtf8Name(Word.nullPointer());
             target.setNameLength(Word.unsigned(0));
             return false;
         }
-        UninterruptibleUtils.String.toUTF8(string, string.length(), buffer, buffer.add(utf8Length), false, replaceDotWithSlash ? dotWithSlash : null);
+        UninterruptibleUtils.String.toModifiedUTF8(string, string.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
         target.setUtf8Name(buffer);
         return true;
     }
