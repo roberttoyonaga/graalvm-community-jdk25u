@@ -33,7 +33,6 @@ import org.graalvm.word.WordBase;
 
 import com.oracle.svm.shared.util.SubstrateUtil;
 import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.util.BasedOnJDKFile;
 import com.oracle.svm.shared.util.VMError;
 
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
@@ -612,25 +611,21 @@ public class UninterruptibleUtils {
             }
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9462-L9464")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         private static boolean isHighSurrogate(char ch) {
             return ch >= Character.MIN_HIGH_SURROGATE && ch < (Character.MAX_HIGH_SURROGATE + 1);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9486-L9487")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         private static boolean isLowSurrogate(char ch) {
             return ch >= Character.MIN_LOW_SURROGATE && ch < (Character.MAX_LOW_SURROGATE + 1);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9568-L9575")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         private static int toCodePoint(char high, char low) {
             return ((high << 10) + low) + (Character.MIN_SUPPLEMENTARY_CODE_POINT - (Character.MIN_HIGH_SURROGATE << 10) - Character.MIN_LOW_SURROGATE);
         }
 
-        @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/java.base/share/classes/java/lang/Character.java#L9552-L9553")
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         public static int charCount(int codePoint) {
             return codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT ? 2 : 1;
