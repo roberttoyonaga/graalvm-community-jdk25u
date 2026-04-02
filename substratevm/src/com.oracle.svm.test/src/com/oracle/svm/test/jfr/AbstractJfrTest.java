@@ -28,14 +28,12 @@ package com.oracle.svm.test.jfr;
 
 import static org.junit.Assume.assumeTrue;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -155,12 +153,8 @@ public abstract class AbstractJfrTest {
         }
     }
 
-    protected static byte[] toModifiedUTF8Bytes(String value) throws IOException {
-        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-        try (DataOutputStream dataStream = new DataOutputStream(byteStream)) {
-            dataStream.writeUTF(value);
-        }
-        return Arrays.copyOfRange(byteStream.toByteArray(), Short.BYTES, byteStream.size());
+    protected static byte[] toUTF8Bytes(String value) {
+        return value.getBytes(StandardCharsets.UTF_8);
     }
 
     protected static boolean containsByteSequence(byte[] fileBytes, byte[] sequence) {

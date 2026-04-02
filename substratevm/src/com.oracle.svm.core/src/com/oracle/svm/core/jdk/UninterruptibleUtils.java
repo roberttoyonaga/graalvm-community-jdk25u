@@ -723,13 +723,18 @@ public class UninterruptibleUtils {
 
         @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
         public static int utf8Length(java.lang.String string, CharReplacer replacer) {
+            return utf8Length(string, string.length(), replacer);
+        }
+
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+        public static int utf8Length(java.lang.String string, int stringLength, CharReplacer replacer) {
             int result = 0;
-            for (int index = 0; index < string.length();) {
+            for (int index = 0; index < stringLength;) {
                 char ch = charAt(string, index);
                 if (replacer != null) {
                     ch = replacer.replace(ch);
                 }
-                if (isHighSurrogate(ch) && index + 1 < string.length()) {
+                if (isHighSurrogate(ch) && index + 1 < stringLength) {
                     char low = charAt(string, index + 1);
                     if (replacer != null) {
                         low = replacer.replace(low);

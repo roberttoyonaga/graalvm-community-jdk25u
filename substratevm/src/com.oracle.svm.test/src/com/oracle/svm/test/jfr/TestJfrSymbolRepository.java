@@ -65,8 +65,8 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
             stopRecording(recording, null);
         }
 
-        assertSymbolUsesModifiedUTF8Encoding(path, EMBEDDED_NUL_SYMBOL);
-        assertSymbolUsesModifiedUTF8Encoding(path, EMOJI_SYMBOL);
+        assertSymbolUsesUTF8Encoding(path, EMBEDDED_NUL_SYMBOL);
+        assertSymbolUsesUTF8Encoding(path, EMOJI_SYMBOL);
     }
 
     @Uninterruptible(reason = "Needed for JfrSymbolRepository.getSymbolId().")
@@ -104,9 +104,9 @@ public class TestJfrSymbolRepository extends JfrRecordingTest {
         assertEquals(0, nullId);
     }
 
-    private static void assertSymbolUsesModifiedUTF8Encoding(Path path, String symbol) throws Exception {
+    private static void assertSymbolUsesUTF8Encoding(Path path, String symbol) throws Exception {
         byte[] fileBytes = Files.readAllBytes(path);
-        assertTrue("Recording file must contain symbol data encoded as modified UTF-8: " + symbol,
-                        containsByteSequence(fileBytes, toModifiedUTF8Bytes(symbol)));
+        assertTrue("Recording file must contain symbol data encoded as UTF-8: " + symbol,
+                        containsByteSequence(fileBytes, toUTF8Bytes(symbol)));
     }
 }

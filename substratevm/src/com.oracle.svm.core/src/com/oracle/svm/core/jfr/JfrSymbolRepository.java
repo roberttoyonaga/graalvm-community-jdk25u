@@ -92,12 +92,12 @@ public class JfrSymbolRepository implements JfrRepository {
         }
 
         assert Heap.getHeap().isInImageHeap(imageHeapString);
-        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(imageHeapString, false, replaceDotWithSlash ? dotWithSlash : null);
+        int encodedLength = UninterruptibleUtils.String.utf8Length(imageHeapString, replaceDotWithSlash ? dotWithSlash : null);
         Pointer buffer = NullableNativeMemory.malloc(encodedLength, NmtCategory.JFR);
         if (buffer.isNull()) {
             return 0;
         }
-        UninterruptibleUtils.String.toModifiedUTF8(imageHeapString, imageHeapString.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
+        UninterruptibleUtils.String.toUTF8(imageHeapString, imageHeapString.length(), buffer, buffer.add(encodedLength), replaceDotWithSlash ? dotWithSlash : null);
 
         return getSymbolId(buffer, Word.unsigned(encodedLength), previousEpoch);
     }
@@ -116,7 +116,7 @@ public class JfrSymbolRepository implements JfrRepository {
 
         assert buffer.isNonNull();
         JfrSymbol symbol = StackValue.get(JfrSymbol.class);
-        symbol.setModifiedUTF8(buffer); // symbol allocated in native memory
+        symbol.setUtf8(buffer); // symbol allocated in native memory
         symbol.setLength(length);
         symbol.setHash(getHash(buffer, length));
 
@@ -130,13 +130,13 @@ public class JfrSymbolRepository implements JfrRepository {
             JfrSymbolEpochData epochData = getEpochData(previousEpoch);
             JfrSymbol existingEntry = (JfrSymbol) epochData.table.get(symbol);
             if (existingEntry.isNonNull()) {
-                NullableNativeMemory.free(symbol.getModifiedUTF8());
+                NullableNativeMemory.free(symbol.getUtf8());
                 return existingEntry.getId();
             }
 
             JfrSymbol newEntry = (JfrSymbol) epochData.table.putNew(symbol);
             if (newEntry.isNull()) {
-                NullableNativeMemory.free(symbol.getModifiedUTF8());
+                NullableNativeMemory.free(symbol.getUtf8());
                 return 0L;
             }
 
@@ -149,7 +149,7 @@ public class JfrSymbolRepository implements JfrRepository {
             JfrNativeEventWriterDataAccess.initialize(data, epochData.buffer);
 
             JfrNativeEventWriter.putLong(data, newEntry.getId());
-            JfrNativeEventWriter.putString(data, newEntry.getModifiedUTF8(), (int) newEntry.getLength().rawValue());
+            JfrNativeEventWriter.putString(data, newEntry.getUtf8(), (int) newEntry.getLength().rawValue());
             if (!JfrNativeEventWriter.commit(data)) {
                 epochData.table.remove(symbol);
                 return 0L;
@@ -204,10 +204,10 @@ public class JfrSymbolRepository implements JfrRepository {
         UnsignedWord getLength();
 
         @RawField
-        void setModifiedUTF8(PointerBase value);
+        void setUtf8(PointerBase value);
 
         @RawField
-        Pointer getModifiedUTF8();
+        Pointer getUtf8();
     }
 
     private static class JfrSymbolHashtable extends AbstractUninterruptibleHashtable {
@@ -236,7 +236,7 @@ public class JfrSymbolRepository implements JfrRepository {
         protected boolean isEqual(UninterruptibleEntry v0, UninterruptibleEntry v1) {
             JfrSymbol a = (JfrSymbol) v0;
             JfrSymbol b = (JfrSymbol) v1;
-            return a.getLength().equal(b.getLength()) && LibC.memcmp(a.getModifiedUTF8(), b.getModifiedUTF8(), a.getLength()) == 0;
+            return a.getLength().equal(b.getLength()) && LibC.memcmp(a.getUtf8(), b.getUtf8(), a.getLength()) == 0;
         }
 
         @Override
@@ -254,7 +254,7 @@ public class JfrSymbolRepository implements JfrRepository {
         protected void free(UninterruptibleEntry entry) {
             JfrSymbol symbol = (JfrSymbol) entry;
             /* The base method will free only the entry itself, not actual utf8 data. */
-            NullableNativeMemory.free(symbol.getModifiedUTF8());
+            NullableNativeMemory.free(symbol.getUtf8());
             super.free(entry);
         }
     }

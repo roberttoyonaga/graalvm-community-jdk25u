@@ -286,7 +286,7 @@ public class JfrTypeRepository implements JfrRepository {
         if (symbol == null) {
             return 0L;
         }
-        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(symbol, false, replaceDotWithSlash ? dotWithSlash : null);
+        int encodedLength = UninterruptibleUtils.String.utf8Length(symbol, replaceDotWithSlash ? dotWithSlash : null);
         if (encodedLength == 0) {
             return SubstrateJVM.getSymbolRepository().getSymbolId(EMPTY_NAME, previousEpoch);
         }
@@ -295,7 +295,7 @@ public class JfrTypeRepository implements JfrRepository {
         if (buffer.isNull()) {
             return 0L;
         }
-        UninterruptibleUtils.String.toModifiedUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
+        UninterruptibleUtils.String.toUTF8(symbol, symbol.length(), buffer, buffer.add(encodedLength), replaceDotWithSlash ? dotWithSlash : null);
         return SubstrateJVM.getSymbolRepository().getSymbolId(buffer, Word.unsigned(encodedLength), previousEpoch);
     }
 
@@ -770,7 +770,7 @@ public class JfrTypeRepository implements JfrRepository {
             dot = 0;
         }
 
-        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(name, false, dotWithSlash);
+        int encodedLength = UninterruptibleUtils.String.utf8Length(name, dot, dotWithSlash);
         if (encodedLength == 0) {
             target.setHasName(true);
             target.setUtf8Name(Word.nullPointer());
@@ -786,7 +786,7 @@ public class JfrTypeRepository implements JfrRepository {
             return;
         }
 
-        Pointer end = UninterruptibleUtils.String.toModifiedUTF8(name, dot, buffer, buffer.add(encodedLength), false, dotWithSlash);
+        Pointer end = UninterruptibleUtils.String.toUTF8(name, dot, buffer, buffer.add(encodedLength), dotWithSlash);
         target.setHasName(true);
         target.setUtf8Name(buffer);
         target.setNameLength(end.subtract(buffer));
@@ -800,7 +800,7 @@ public class JfrTypeRepository implements JfrRepository {
             return true;
         }
 
-        int encodedLength = UninterruptibleUtils.String.modifiedUTF8Length(string, false, replaceDotWithSlash ? dotWithSlash : null);
+        int encodedLength = UninterruptibleUtils.String.utf8Length(string, replaceDotWithSlash ? dotWithSlash : null);
         target.setHasName(true);
         target.setNameLength(Word.unsigned(encodedLength));
         if (encodedLength == 0) {
@@ -815,7 +815,7 @@ public class JfrTypeRepository implements JfrRepository {
             target.setNameLength(Word.unsigned(0));
             return false;
         }
-        UninterruptibleUtils.String.toModifiedUTF8(string, string.length(), buffer, buffer.add(encodedLength), false, replaceDotWithSlash ? dotWithSlash : null);
+        UninterruptibleUtils.String.toUTF8(string, string.length(), buffer, buffer.add(encodedLength), replaceDotWithSlash ? dotWithSlash : null);
         target.setUtf8Name(buffer);
         return true;
     }
