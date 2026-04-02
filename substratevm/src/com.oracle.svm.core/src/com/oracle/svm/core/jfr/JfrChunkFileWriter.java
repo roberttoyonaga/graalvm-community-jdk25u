@@ -407,7 +407,6 @@ public final class JfrChunkFileWriter implements JfrChunkWriter {
 
     private int writeSerializers() {
         JfrSerializer[] serializers = JfrSerializerSupport.get().getSerializers();
-        // noinspection ForLoopReplaceableByForEach: must be allocation free.
         for (int i = 0; i < serializers.length; i++) {
             serializers[i].write(this);
         }

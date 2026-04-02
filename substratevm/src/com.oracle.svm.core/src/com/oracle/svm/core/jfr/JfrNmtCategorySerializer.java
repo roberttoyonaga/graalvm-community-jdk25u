@@ -43,7 +43,6 @@ public class JfrNmtCategorySerializer implements JfrSerializer {
     public void write(JfrChunkWriter writer) {
         writer.writeCompressedLong(JfrType.NMTType.getId());
         writer.writeCompressedLong(nmtCategories.length);
-        // noinspection ForLoopReplaceableByForEach: must be allocation free.
         for (int i = 0; i < nmtCategories.length; i++) {
             writer.writeCompressedInt(nmtCategories[i].ordinal());
             writer.writeString(nmtCategories[i].getName());

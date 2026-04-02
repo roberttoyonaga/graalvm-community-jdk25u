@@ -648,6 +648,7 @@ public class SubstrateJVM {
         if (JfrEmergencyDumpSupport.isPresent()) {
             return JfrEmergencyDumpSupport.singleton().getDumpPath();
         }
+        // The JDK side passes JVM.getDumpPath() to Path.of(...), so keep this non-null.
         return "";
     }
 

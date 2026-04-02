@@ -42,7 +42,6 @@ public class JfrGCCauseSerializer implements JfrSerializer {
         List<GCCause> causes = GCCause.getGCCauses();
         int nonNullItems = 0;
 
-        // noinspection ForLoopReplaceableByForEach: must be allocation free.
         for (int i = 0; i < causes.size(); i++) {
             if (causes.get(i) != null) {
                 nonNullItems++;
@@ -53,7 +52,6 @@ public class JfrGCCauseSerializer implements JfrSerializer {
 
         writer.writeCompressedLong(JfrType.GCCause.getId());
         writer.writeCompressedLong(nonNullItems);
-        // noinspection ForLoopReplaceableByForEach: must be allocation free.
         for (int i = 0; i < causes.size(); i++) {
             if (causes.get(i) != null) {
                 writer.writeCompressedLong(causes.get(i).getId());
