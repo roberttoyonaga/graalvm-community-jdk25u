@@ -62,10 +62,10 @@ import java.nio.charset.StandardCharsets;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_NOFOLLOW;
 import static com.oracle.svm.core.posix.headers.Fcntl.O_RDONLY;
 
-@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L43-L445")
+@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25-ga/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L43-L445")
 public class PosixJfrEmergencyDumpSupport implements com.oracle.svm.core.jfr.JfrEmergencyDumpSupport {
     private static final int CHUNK_FILE_HEADER_SIZE = 68;
-    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25.0.2+10/src/hotspot/os/posix/include/jvm_md.h#L57") //
+    @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25-ga/src/hotspot/os/posix/include/jvm_md.h#L57") //
     private static final int JVM_MAXPATHLEN = 4096;
     private static final int ISO_8601_LEN = 19;
     private static final byte FILE_SEPARATOR = '/';
