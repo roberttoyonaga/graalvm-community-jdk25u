@@ -269,7 +269,7 @@ public class JfrTypeRepository implements JfrRepository {
     private void writeClass(TypeInfo typeInfo, JfrChunkWriter writer, Class<?> clazz) {
         writer.writeCompressedLong(JfrTraceId.getTraceId(clazz));
         writer.writeCompressedLong(getClassLoaderId(typeInfo, clazz.getClassLoader()));
-        writer.writeCompressedLong(getSymbolId(writer, clazz.getName(), false));
+        writer.writeCompressedLong(getSymbolId(writer, clazz.getName(), true));
         writer.writeCompressedLong(getPackageId(typeInfo, clazz));
         writer.writeCompressedLong(clazz.getModifiers());
         writer.writeBoolean(clazz.isHidden());
