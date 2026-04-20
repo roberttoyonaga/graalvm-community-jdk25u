@@ -24,7 +24,7 @@
  */
 package com.oracle.svm.core.jfr;
 
-import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import com.oracle.svm.core.headers.LibC;
 import org.graalvm.nativeimage.Platform;
@@ -37,9 +37,7 @@ import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.word.UnsignedWord;
 
-import org.graalvm.word.impl.Word;
-
-import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.collections.AbstractUninterruptibleHashtable;
 import com.oracle.svm.core.collections.UninterruptibleEntry;
 import com.oracle.svm.core.heap.Heap;
@@ -52,6 +50,7 @@ import com.oracle.svm.core.memory.NullableNativeMemory;
 import com.oracle.svm.core.nmt.NmtCategory;
 
 import jdk.graal.compiler.core.common.SuppressFBWarnings;
+import jdk.graal.compiler.word.Word;
 
 /**
  * In Native Image, we use {@link java.lang.String} objects that live in the image heap as symbols.

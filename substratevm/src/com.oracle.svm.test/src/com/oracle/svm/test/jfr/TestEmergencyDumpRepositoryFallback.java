@@ -42,7 +42,6 @@ import com.oracle.svm.core.jfr.JfrEvent;
 import com.oracle.svm.core.jfr.JfrEmergencyDumpSupport;
 import com.oracle.svm.core.jfr.SubstrateJVM;
 import com.oracle.svm.core.posix.jfr.PosixJfrEmergencyDumpSupport;
-import com.oracle.svm.shared.util.ClassUtil;
 import com.oracle.svm.test.jfr.events.StringEvent;
 
 import jdk.jfr.Configuration;
@@ -62,8 +61,8 @@ public class TestEmergencyDumpRepositoryFallback extends AbstractJfrTest {
             return;
         }
 
-        Path repositoryDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-repository-");
-        Path dumpDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-dump-");
+        Path repositoryDir = Files.createTempDirectory(getClass().getSimpleName() + "-repository-");
+        Path dumpDir = Files.createTempDirectory(getClass().getSimpleName() + "-dump-");
         String[] events = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
         try {
             PosixJfrEmergencyDumpSupport.TestingBackdoor.resetEmergencyChunkPathCallCount(support);

@@ -28,7 +28,6 @@ package com.oracle.svm.test.jfr;
 
 import org.graalvm.nativeimage.StackValue;
 import org.graalvm.word.WordFactory;
-import org.graalvm.word.impl.Word;
 import org.junit.Test;
 
 import com.oracle.svm.core.collections.GrowableWordArray;
@@ -40,6 +39,8 @@ import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import jdk.graal.compiler.word.Word;
 
 public class TestGrowableWordArrayQuickSort {
     @Test

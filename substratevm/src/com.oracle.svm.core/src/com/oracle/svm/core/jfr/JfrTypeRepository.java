@@ -25,7 +25,7 @@
 package com.oracle.svm.core.jfr;
 
 import static com.oracle.svm.core.heap.RestrictHeapAccess.Access.NO_ALLOCATION;
-import static com.oracle.svm.shared.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
+import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -40,7 +40,6 @@ import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.nativeimage.c.struct.SizeOf;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
-import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.UnmanagedMemoryUtil;
 import com.oracle.svm.core.c.struct.PinnedObjectField;
@@ -51,12 +50,14 @@ import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
-import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.jfr.traceid.JfrTraceId;
 import com.oracle.svm.core.jfr.traceid.JfrTraceIdEpoch;
 import com.oracle.svm.core.locks.VMMutex;
 import com.oracle.svm.core.memory.NullableNativeMemory;
 import com.oracle.svm.core.nmt.NmtCategory;
+
+import jdk.graal.compiler.word.Word;
 
 /**
  * Repository that collects and writes used classes, packages, modules, and classloaders.

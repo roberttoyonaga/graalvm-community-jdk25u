@@ -33,7 +33,6 @@ import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
-import org.graalvm.word.impl.Word;
 
 import com.oracle.svm.core.heap.RestrictHeapAccess;
 import com.oracle.svm.core.heap.VMOperationInfos;
@@ -53,17 +52,13 @@ import com.oracle.svm.core.sampler.SubstrateSigprofHandler;
 import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.thread.JavaVMOperation;
 import com.oracle.svm.core.thread.VMThreads;
-import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.PartiallyLayerAware;
-import com.oracle.svm.shared.singletons.traits.SingletonTraits;
-import com.oracle.svm.shared.util.BasedOnJDKFile;
-
-import com.oracle.svm.shared.util.VMError;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.util.BasedOnJDKFile;
+import com.oracle.svm.core.util.VMError;
 
 import jdk.graal.compiler.api.replacements.Fold;
 import jdk.graal.compiler.core.common.NumUtil;
+import jdk.graal.compiler.word.Word;
 import jdk.internal.event.Event;
 import jdk.jfr.Configuration;
 import jdk.jfr.internal.JVM;
@@ -82,7 +77,6 @@ import jdk.jfr.internal.LogTag;
  * <li>{@link #destroyJFR()} - destroy the JFR infrastructure and free data.</li>
  * </ul>
  */
-@SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = PartiallyLayerAware.class)
 public class SubstrateJVM {
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25-ga/src/hotspot/share/jfr/recorder/repository/jfrEmergencyDump.cpp#L569") //
     private static final String OUT_OF_MEMORY = "Out of Memory";

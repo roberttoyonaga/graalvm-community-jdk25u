@@ -34,14 +34,13 @@ import com.oracle.svm.core.posix.headers.Errno;
 import com.oracle.svm.core.posix.headers.Fcntl;
 import com.oracle.svm.core.posix.headers.Unistd;
 import org.graalvm.word.Pointer;
-import org.graalvm.word.impl.Word;
 import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.StackValue;
 
-import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.jfr.JfrEmergencyDumpSupport;
 import com.oracle.svm.core.jfr.SubstrateJVM;
@@ -53,10 +52,11 @@ import com.oracle.svm.core.os.RawFileOperationSupport.FileCreationMode;
 import com.oracle.svm.core.os.RawFileOperationSupport.RawFileDescriptor;
 import com.oracle.svm.core.collections.GrowableWordArray;
 import com.oracle.svm.core.collections.GrowableWordArrayAccess;
-import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
-import com.oracle.svm.shared.util.BasedOnJDKFile;
-import com.oracle.svm.shared.util.SubstrateUtil;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.util.BasedOnJDKFile;
+import com.oracle.svm.core.SubstrateUtil;
 
+import jdk.graal.compiler.word.Word;
 import java.nio.charset.StandardCharsets;
 
 import static com.oracle.svm.core.posix.headers.Fcntl.O_NOFOLLOW;

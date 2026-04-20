@@ -44,7 +44,6 @@ import com.oracle.svm.core.heap.OutOfMemoryUtil;
 import com.oracle.svm.core.jfr.HasJfrSupport;
 import com.oracle.svm.core.jfr.JfrEvent;
 import com.oracle.svm.core.jfr.SubstrateJVM;
-import com.oracle.svm.shared.util.ClassUtil;
 import com.oracle.svm.test.jfr.events.StringEvent;
 
 import jdk.jfr.Recording;
@@ -73,7 +72,7 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
 
         String[] events = new String[]{STRING_EVENT_NAME, JfrEvent.DumpReason.getName()};
         long pid = ProcessHandle.current().pid();
-        Path rootDumpDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-");
+        Path rootDumpDir = Files.createTempDirectory(getClass().getSimpleName() + "-");
         List<Path> dumpFiles = new ArrayList<>(ITERATIONS);
         try {
             for (int i = 0; i < ITERATIONS; i++) {
@@ -120,7 +119,7 @@ public class TestEmergencyDumpRecoveredOutOfMemory extends JfrRecordingTest {
         }
 
         String message = "actual-oom";
-        Path dumpDir = Files.createTempDirectory(ClassUtil.getUnqualifiedName(getClass()) + "-actual-oom-");
+        Path dumpDir = Files.createTempDirectory(getClass().getSimpleName() + "-actual-oom-");
         try {
             WorkerResult worker = runActualOutOfMemoryWorkerProcess(dumpDir, message);
             assertEquals(worker.output(), 0, worker.exitCode());

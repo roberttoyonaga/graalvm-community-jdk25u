@@ -32,14 +32,17 @@ import org.graalvm.nativeimage.c.struct.RawField;
 import org.graalvm.nativeimage.c.struct.RawStructure;
 import org.graalvm.word.PointerBase;
 
-import com.oracle.svm.shared.util.BasedOnJDKFile;
-import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.util.BasedOnJDKFile;
+
+import jdk.graal.compiler.api.replacements.Fold;
 
 /**
  * Platform dependent time related utils. See also {@link TimeUtils} for platform independent utils.
  */
 public abstract class PlatformTimeUtils {
 
+    @Fold
     public static PlatformTimeUtils singleton() {
         return ImageSingletons.lookup(PlatformTimeUtils.class);
     }

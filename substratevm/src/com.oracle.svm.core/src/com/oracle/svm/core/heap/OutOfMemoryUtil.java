@@ -35,8 +35,8 @@ import com.oracle.svm.core.jfr.SubstrateJVM;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.stack.StackOverflowCheck;
 import com.oracle.svm.core.thread.VMOperation;
-import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.util.VMError;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.util.VMError;
 
 /**
  * This class must be used for {@link OutOfMemoryError}s that are thrown because the VM is out of

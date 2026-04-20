@@ -52,7 +52,7 @@ import org.graalvm.word.Pointer;
 
 import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.VMInspectionOptions;
-import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.headers.LibC;
 import com.oracle.svm.core.jdk.DirectByteBufferUtil;
@@ -74,13 +74,8 @@ import com.oracle.svm.core.posix.headers.Mman;
 import com.oracle.svm.core.posix.headers.PosixFile;
 import com.oracle.svm.core.posix.headers.Signal;
 import com.oracle.svm.core.posix.headers.Unistd;
-import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.BuildtimeAccessOnly;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.RuntimeAccessOnly;
-import com.oracle.svm.shared.singletons.traits.BuiltinTraits.SingleLayer;
-import com.oracle.svm.shared.singletons.traits.SingletonLayeredInstallationKind.InitialLayerOnly;
-import com.oracle.svm.shared.singletons.traits.SingletonTraits;
-import com.oracle.svm.shared.util.BasedOnJDKFile;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.util.BasedOnJDKFile;
 
 import jdk.graal.compiler.core.common.NumUtil;
 

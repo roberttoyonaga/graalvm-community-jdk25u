@@ -81,6 +81,15 @@ public class PosixLibC {
     public static native int strncmp(PointerBase s1, PointerBase s2, UnsignedWord n);
 
     @CFunction(transition = CFunction.Transition.NO_TRANSITION)
+    public static native CCharPointer strcpy(CCharPointer dst, CCharPointer src);
+
+    @CFunction(transition = CFunction.Transition.NO_TRANSITION)
+    public static native CCharPointer strncpy(CCharPointer dst, CCharPointer src, UnsignedWord len);
+
+    @CFunction(transition = CFunction.Transition.NO_TRANSITION)
+    public static native UnsignedWord strlcpy(CCharPointer dst, CCharPointer src, UnsignedWord len);
+
+    @CFunction(transition = CFunction.Transition.NO_TRANSITION)
     public static native CCharPointer strdup(CCharPointer src);
 
     @CFunction(transition = CFunction.Transition.NO_TRANSITION)

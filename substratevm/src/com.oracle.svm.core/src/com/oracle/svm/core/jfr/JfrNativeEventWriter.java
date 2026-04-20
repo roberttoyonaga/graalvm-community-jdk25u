@@ -32,8 +32,10 @@ import com.oracle.svm.core.UnmanagedMemoryUtil;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
 import com.oracle.svm.core.jdk.UninterruptibleUtils.CharReplacer;
 import com.oracle.svm.core.util.DuplicatedInNativeCode;
-import com.oracle.svm.shared.Uninterruptible;
-import com.oracle.svm.shared.util.VMError;
+import com.oracle.svm.core.Uninterruptible;
+import com.oracle.svm.core.util.VMError;
+
+import jdk.graal.compiler.word.Word;
 
 /**
  * A JFR event writer that does not allocate any objects in the Java heap. Can only be used from

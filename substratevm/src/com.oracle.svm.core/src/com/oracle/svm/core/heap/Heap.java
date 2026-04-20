@@ -36,18 +36,19 @@ import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.UnsignedWord;
 
-import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.PredefinedClassesSupport;
 import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.log.Log;
-import com.oracle.svm.core.option.NotifyGCRuntimeOptionKey;
+import com.oracle.svm.core.option.RuntimeOptionKey;
 import com.oracle.svm.core.snippets.KnownIntrinsics;
-import com.oracle.svm.shared.Uninterruptible;
 
 import jdk.graal.compiler.api.replacements.Fold;
 
 public abstract class Heap {
+    protected long startOffset;
+
     @Fold
     public static Heap getHeap() {
         return ImageSingletons.lookup(Heap.class);
@@ -73,7 +74,7 @@ public abstract class Heap {
      * heap-specific resources, e.g., the TLAB. This method is called for every thread except the
      * main thread (i.e., the one that maps the image heap).
      */
-    @Uninterruptible(reason = "Current thread holds the ThreadsLock with exclusive write access.")
+    @Uninterruptible(reason = "Thread is detaching and holds the THREAD_MUTEX.")
     public abstract void detachThread(IsolateThread isolateThread);
 
     public abstract void suspendAllocation();
@@ -111,7 +112,7 @@ public abstract class Heap {
 
     /** Visits all loaded classes in the heap (see {@link PredefinedClassesSupport}). */
     public void visitLoadedClasses(Consumer<Class<?>> visitor) {
-        for (Class<?> clazz : getClassesInImageHeap()) {
+        for (Class<?> clazz : getAllClasses()) {
             if (DynamicHub.fromClass(clazz).isLoaded()) {
                 visitor.accept(clazz);
             }
@@ -119,10 +120,10 @@ public abstract class Heap {
     }
 
     /**
-     * Returns all class objects that live in the image heap. Intentionally protected to prevent
-     * access to classes that have not been loaded yet, see {@link PredefinedClassesSupport}.
+     * Get all known classes. Intentionally protected to prevent access to classes that have not
+     * been "loaded" yet, see {@link PredefinedClassesSupport}.
      */
-    protected abstract List<Class<?>> getClassesInImageHeap();
+    protected abstract List<Class<?>> getAllClasses();
 
     /**
      * Get the ObjectHeader implementation that this Heap uses.
@@ -140,20 +141,9 @@ public abstract class Heap {
     /** Reset the heap to the normal execution state. */
     public abstract void endSafepoint();
 
-    /**
-     * Returns the alignment in bytes that the heap base must adhere to at runtime. Note that this
-     * alignment is not enforced if {@link SubstrateOptions#SpawnIsolates} is disabled.
-     */
+    /** Returns a multiple to which the heap address space should be aligned to at runtime. */
     @Fold
-    public abstract int getHeapBaseAlignment();
-
-    /**
-     * Returns the alignment in bytes that each image heap and any auxiliary images must adhere to
-     * at runtime. Note that this alignment is not enforced if
-     * {@link SubstrateOptions#SpawnIsolates} is disabled.
-     */
-    @Fold
-    public abstract int getImageHeapAlignment();
+    public abstract int getPreferredAddressSpaceAlignment();
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public Pointer getImageHeapStart() {
@@ -162,7 +152,7 @@ public abstract class Heap {
 
     /**
      * Returns an offset relative to the heap base, at which the image heap should be mapped into
-     * the address space. The offset is a multiple of {@link #getImageHeapAlignment}.
+     * the address space.
      */
     @Fold
     public abstract int getImageHeapOffsetInAddressSpace();
@@ -232,7 +222,7 @@ public abstract class Heap {
     /**
      * Notify the GC that the value of a GC-relevant option changed.
      */
-    public abstract void optionValueChanged(NotifyGCRuntimeOptionKey<?> key);
+    public abstract void optionValueChanged(RuntimeOptionKey<?> key);
 
     /**
      * Returns the number of bytes that were allocated by the given thread. The caller of this
@@ -244,6 +234,10 @@ public abstract class Heap {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public abstract UnsignedWord getUsedMemoryAfterLastGC();
+
+    public abstract UnsignedWord getImageHeapReservedBytes();
+
+    public abstract UnsignedWord getImageHeapCommittedBytes();
 
     /** Consider all references in the given object as needing remembered set entries. */
     @Uninterruptible(reason = "Ensure that no GC can occur between modification of the object and this call.", callerMustBe = true)
@@ -264,4 +258,11 @@ public abstract class Heap {
      */
     @Uninterruptible(reason = "Ensure that no GC can occur between this call and usage of the salt.", callerMustBe = true)
     public abstract long getIdentityHashSalt(Object obj);
+
+    /**
+     * Sets the start offset of the heap.
+     */
+    public void setStartOffset(long startOffset) {
+        this.startOffset = startOffset;
+    }
 }
