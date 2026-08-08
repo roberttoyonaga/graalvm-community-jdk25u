@@ -32,6 +32,7 @@ import org.graalvm.nativeimage.StackValue;
 import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.util.BasedOnJDKFile;
+import com.oracle.svm.core.util.BasedOnJDKFile;
 import com.oracle.svm.core.util.PlatformTimeUtils;
 import com.oracle.svm.core.windows.headers.WinBase.FILETIME;
 
@@ -60,12 +61,13 @@ public final class WindowsPlatformTimeUtils extends PlatformTimeUtils {
     @Override
     @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-24+3/src/hotspot/os/windows/os_windows.cpp#L1198-L1205")
     @Uninterruptible(reason = "Must not migrate platform threads when executing on a virtual thread.")
-    public SecondsNanos javaTimeSystemUTC() {
+    protected void javaTimeSystemUTC0(SecondsNanosBuffer result) {
         FILETIME wt = StackValue.get(FILETIME.class);
         GetSystemTimeAsFileTime(wt);
         long ticks = windowsToTimeTicks(wt); // 10th of micros
         long secs = ticks / 10000000L; // 10000 * 1000
         long nanos = (ticks - (secs * 10000000L)) * 100L;
-        return allocateSecondsNanosInterruptibly(secs, nanos);
+        result.setSeconds(secs);
+        result.setNanos(nanos);
     }
 }

@@ -57,6 +57,11 @@ public class JfrMethodRepository implements JfrRepository {
         epochData1.teardown();
     }
 
+    public void reset() {
+        epochData0.clear(false);
+        epochData1.clear(false);
+    }
+
     @Uninterruptible(reason = "Locking without transition and result is only valid until epoch changes.", callerMustBe = true)
     public long getMethodId(Class<?> clazz, String methodName, String methodSignature, int methodId, int methodModifier) {
         assert clazz != null;

@@ -38,6 +38,7 @@ import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.memory.NativeMemory;
 import com.oracle.svm.core.memory.NullableNativeMemory;
 import com.oracle.svm.core.memory.UntrackedNullableNativeMemory;
+import com.oracle.svm.core.Uninterruptible;
 
 import jdk.graal.compiler.api.replacements.Fold;
 
@@ -114,6 +115,11 @@ public class LibC {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static int strcmp(CCharPointer s1, CCharPointer s2) {
         return libc().strcmp(s1, s2);
+    }
+
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
+    public static int strncmp(CCharPointer s1, CCharPointer s2, UnsignedWord n) {
+        return libc().strncmp(s1, s2, n);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

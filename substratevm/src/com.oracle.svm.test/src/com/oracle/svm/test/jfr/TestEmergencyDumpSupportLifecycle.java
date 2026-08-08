@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2020, 2022, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2026, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,33 +26,33 @@
 package com.oracle.svm.test.jfr;
 
 import static org.junit.Assert.assertEquals;
-
-import java.util.List;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.oracle.svm.test.jfr.events.StringEvent;
+import com.oracle.svm.core.jfr.HasJfrSupport;
+import com.oracle.svm.core.jfr.JfrEmergencyDumpSupport;
+import com.oracle.svm.core.posix.jfr.PosixJfrEmergencyDumpSupport;
 
-import jdk.jfr.Recording;
-import jdk.jfr.consumer.RecordedEvent;
-
-public class TestStringEvent extends JfrRecordingTest {
-    private static final String MESSAGE = "modified-utf-event\0message \uD83D\uDE80";
-
+public class TestEmergencyDumpSupportLifecycle extends AbstractJfrTest {
     @Test
-    public void test() throws Throwable {
-        String[] events = new String[]{"com.jfr.String"};
-        Recording recording = startRecording(events);
+    public void testRepeatedInitializeReusesPathBuffer() {
+        if (!HasJfrSupport.get()) {
+            return;
+        }
+        if (!(JfrEmergencyDumpSupport.singleton() instanceof PosixJfrEmergencyDumpSupport support)) {
+            return;
+        }
 
-        StringEvent event = new StringEvent();
-        event.message = MESSAGE;
-        event.commit();
+        support.teardown();
+        support.initialize();
+        long firstAddress = PosixJfrEmergencyDumpSupport.TestingBackdoor.getPathBufferAddress(support);
+        assertTrue(firstAddress != 0L);
 
-        stopRecording(recording, TestStringEvent::validateEvents);
-    }
+        support.initialize();
+        long secondAddress = PosixJfrEmergencyDumpSupport.TestingBackdoor.getPathBufferAddress(support);
+        assertEquals(firstAddress, secondAddress);
 
-    private static void validateEvents(List<RecordedEvent> events) {
-        assertEquals(1, events.size());
-        assertEquals(MESSAGE, events.getFirst().getString("message"));
+        support.teardown();
     }
 }
