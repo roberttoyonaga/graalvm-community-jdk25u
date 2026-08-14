@@ -186,6 +186,10 @@ public final class HostedImageLayerBuildingSupport extends ImageLayerBuildingSup
 
             SubstrateOptions.UseBaseLayerInclusionPolicy.update(values, true);
             SubstrateOptions.ClosedTypeWorld.update(values, false);
+            /*
+             * In a shared layer we do not want to perform aggressive inlining.
+             */
+            SubstrateOptions.AOTPriorityInline.update(values, false);
             if (SubstrateOptions.imageLayerEnabledHandler != null) {
                 SubstrateOptions.imageLayerEnabledHandler.onOptionEnabled(values);
             }
