@@ -47,7 +47,6 @@ import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.debug.MethodFilter;
 import jdk.graal.compiler.graph.Graph;
 import jdk.graal.compiler.graph.NodeSourcePosition;
-import jdk.graal.compiler.java.BytecodeParser;
 import jdk.graal.compiler.java.BytecodeParserOptions;
 import jdk.graal.compiler.java.GraphBuilderPhase;
 import jdk.graal.compiler.nodes.CallTargetNode;
@@ -382,7 +381,7 @@ public class CallTree extends Graph {
 
     private static boolean catchTypeIncludesOOME(ResolvedJavaMethod callerMethod, ExceptionHandler handler) {
         JavaType catchType = resolveCatchType(callerMethod, handler);
-        return BytecodeParser.isDirectOutOfMemoryErrorCatch(catchType);
+        return catchType != null && catchType.getName().equals("Ljava/lang/OutOfMemoryError;");
     }
 
     /**
@@ -622,7 +621,7 @@ public class CallTree extends Graph {
         }
 
         // Parse the graph.
-        getGraphBuilderSuite(constantsSeen, constants, inOOMEProtectedInlineContext).apply(newGraph, context);
+        getGraphBuilderSuite(constantsSeen, constants, invoke).apply(newGraph, context);
         assert newGraph.start().next() != null : "graph needs to be populated";
         // Ensure box nodes in the graph are processed before using the graph.
         new BoxNodeIdentityPhase().apply(newGraph, getContext());
@@ -674,8 +673,8 @@ public class CallTree extends Graph {
         return stateAfter;
     }
 
-    private PhaseSuite<HighTierContext> getGraphBuilderSuite(boolean constantSeen, Object[] constants, boolean inOOMEProtectedInlineContext) {
-        PhaseSuite<HighTierContext> suite = context.getGraphBuilderSuiteForCallee(inOOMEProtectedInlineContext);
+    private PhaseSuite<HighTierContext> getGraphBuilderSuite(boolean constantSeen, Object[] constants, Invoke invoke) {
+        PhaseSuite<HighTierContext> suite = context.getGraphBuilderSuiteForCallee(invoke);
 
         if (constantSeen) {
             Replacements replacements = context.getReplacements();

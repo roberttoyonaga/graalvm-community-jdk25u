@@ -825,4 +825,100 @@ public class InliningData {
         assert topGraphsForTopInvocation();
         return true;
     }
+
+    /**
+     * Holds the result of resolving an invoke to a single direct target, either because the invoke
+     * is already direct/statically bound or because it was devirtualized.
+     */
+    public record DevirtualizationInfo(Invoke invoke, ResolvedJavaMethod targetMethod, ResolvedJavaType dispatchedType, AssumptionResult<?> takenAssumption) {
+        public InlineInfo asInlineInfo() {
+            return takenAssumption == null ? new ExactInlineInfo(invoke, targetMethod)
+                            : new AssumptionInlineInfo(invoke, targetMethod, takenAssumption);
+        }
+    }
+
+    /**
+     * Returns the target of an invoke that is already direct, statically bound, or can be
+     * devirtualized to a single target.
+     */
+    public static DevirtualizationInfo resolveDirectOrDevirtualizedTargetInfo(Invoke invoke, boolean mayUseAssumptions) {
+        if (invoke.getInvokeKind().isDirect()) {
+            return new DevirtualizationInfo(invoke, invoke.getTargetMethod(), null, null);
+        }
+        MethodCallTargetNode callTarget = (MethodCallTargetNode) invoke.callTarget();
+        ResolvedJavaMethod targetMethod = callTarget.targetMethod();
+        if (targetMethod == null) {
+            return null;
+        }
+        if (targetMethod.canBeStaticallyBound()) {
+            return new DevirtualizationInfo(invoke, targetMethod, null, null);
+        }
+        return getDevirtualizationInfo(invoke, callTarget, targetMethod, mayUseAssumptions);
+    }
+
+    /**
+     * Returns the target of an invoke that is already direct, statically bound, or can be
+     * devirtualized without relying on assumptions.
+     */
+    public static DevirtualizationInfo resolveDirectOrDevirtualizedTargetInfo(Invoke invoke) {
+        return resolveDirectOrDevirtualizedTargetInfo(invoke, false);
+    }
+
+    /**
+     * Returns the target method for an invoke that is already direct, statically bound, or can be
+     * devirtualized to a single target.
+     */
+    public static ResolvedJavaMethod resolveDirectOrDevirtualizedTargetMethod(Invoke invoke, boolean mayUseAssumptions) {
+        DevirtualizationInfo resolution = resolveDirectOrDevirtualizedTargetInfo(invoke, mayUseAssumptions);
+        return resolution != null ? resolution.targetMethod() : null;
+    }
+
+    private static DevirtualizationInfo getDevirtualizationInfo(Invoke invoke, MethodCallTargetNode callTarget, ResolvedJavaMethod targetMethod, boolean mayUseAssumptions) {
+        InvokeKind invokeKind = callTarget.invokeKind();
+        assert invokeKind.isIndirect();
+
+        ResolvedJavaType holder = targetMethod.getDeclaringClass();
+        ObjectStamp receiverStamp = (ObjectStamp) callTarget.receiver().stamp(NodeView.DEFAULT);
+        if (receiverStamp.alwaysNull()) {
+            return null;
+        }
+        ResolvedJavaType contextType = invoke.getContextType();
+        if (receiverStamp.type() != null) {
+            ResolvedJavaType receiverType = receiverStamp.type();
+            if (receiverType != null && holder.isAssignableFrom(receiverType)) {
+                holder = receiverType;
+                if (receiverStamp.isExactType()) {
+                    ResolvedJavaMethod resolvedMethod = holder.resolveConcreteMethod(targetMethod, contextType);
+                    if (resolvedMethod != null) {
+                        return new DevirtualizationInfo(invoke, resolvedMethod, holder, null);
+                    }
+                }
+            }
+        }
+
+        if (holder.isArray()) {
+            ResolvedJavaMethod resolvedMethod = holder.resolveConcreteMethod(targetMethod, contextType);
+            if (resolvedMethod != null) {
+                return new DevirtualizationInfo(invoke, resolvedMethod, null, null);
+            }
+        }
+
+        if (mayUseAssumptions && invokeKind != InvokeKind.Interface && callTarget.graph().getAssumptions() != null) {
+            var assumptions = callTarget.graph().getAssumptions();
+            AssumptionResult<ResolvedJavaType> leafConcreteSubtype = holder.findLeafConcreteSubtype();
+            if (leafConcreteSubtype != null) {
+                ResolvedJavaType dispatchedType = leafConcreteSubtype.getResult();
+                ResolvedJavaMethod resolvedMethod = dispatchedType.resolveConcreteMethod(targetMethod, contextType);
+                if (resolvedMethod != null && leafConcreteSubtype.canRecordTo(assumptions)) {
+                    return new DevirtualizationInfo(invoke, resolvedMethod, dispatchedType, leafConcreteSubtype);
+                }
+            }
+
+            AssumptionResult<ResolvedJavaMethod> concrete = holder.findUniqueConcreteMethod(targetMethod);
+            if (concrete != null && concrete.canRecordTo(assumptions)) {
+                return new DevirtualizationInfo(invoke, concrete.getResult(), null, concrete);
+            }
+        }
+        return null;
+    }
 }

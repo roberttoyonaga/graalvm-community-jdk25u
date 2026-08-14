@@ -450,7 +450,7 @@ public class InterproceduralPartialEscapeAnalysisPhase extends PartialEscapePhas
         replacements.put(graph.start(), graphCopy.start());
 
         UnmodifiableEconomicMap<Node, Node> nodeNodeMap;
-        try (InliningLog.UpdateScope _ = InliningLog.openDefaultUpdateScope(graphCopy.getInliningLog())) {
+        try (InliningLog.UpdateScope scope = InliningLog.openDefaultUpdateScope(graphCopy.getInliningLog())) {
             nodeNodeMap = graphCopy.addDuplicates(graph.getNodes(), graph, graph.getNodeCount(), replacements);
         }
         /*

@@ -175,10 +175,10 @@ public class SubstratePolicyFactory extends DefaultPolicyFactory {
         public void afterExpansionPhase(CallTree callTree, CoreProviders coreProviders, int expansionRound, TimerKey expanderExtraAnalysisDuration) {
             InterproceduralPartialEscapeAnalysisCallTreeState callTreeState = getIPEACallTreeState(callTree);
             if (callTreeState.shouldRunIPEA()) {
-                try (DebugCloseable _ = expanderExtraAnalysisDuration.start(callTree.getDebug())) {
-                    DebugContext debugContext = callTree.getDebug();
-                    InterproceduralPartialEscapeAnalysisUtil.afterExpansionPhase(callTree, callTreeState.analysisResult());
-                    debugContext.dump(DebugContext.VERBOSE_LEVEL, callTree, "round %d, after post-expansion analysis", expansionRound);
+try (DebugCloseable dc = expanderExtraAnalysisDuration.start(callTree.getDebug())) {
+                DebugContext debugContext = callTree.getDebug();
+                InterproceduralPartialEscapeAnalysisUtil.afterExpansionPhase(callTree, callTreeState.analysisResult());
+                debugContext.dump(DebugContext.VERBOSE_LEVEL, callTree, "round %d, after post-expansion analysis", expansionRound);
                 }
             }
         }
@@ -187,7 +187,7 @@ public class SubstratePolicyFactory extends DefaultPolicyFactory {
         public void afterExpandingCutoffNode(CallTreeNode replacementNode, CallTreeNode replacedNode, CoreProviders coreProviders, int expansionRound, TimerKey expanderExtraAnalysisDuration) {
             InterproceduralPartialEscapeAnalysisCallTreeState callTreeState = getIPEACallTreeState(replacementNode.callTree());
             if (callTreeState.shouldRunIPEA()) {
-                try (DebugCloseable _ = expanderExtraAnalysisDuration.start(replacementNode.getDebug())) {
+                try (DebugCloseable dc = expanderExtraAnalysisDuration.start(replacementNode.getDebug())) {
                     callTreeState.setAnalysisResult(InterproceduralPartialEscapeAnalysisUtil.afterExpandingCutoffNode(replacementNode, replacedNode, coreProviders, callTreeState.analysisResult()));
                     replacementNode.callTree().restoreSubtreeInvariants(replacementNode.parent(), true);
                 }
@@ -198,7 +198,7 @@ public class SubstratePolicyFactory extends DefaultPolicyFactory {
         public void beforeExpansion(CallTree callTree, CoreProviders coreProviders, int expansionRound, TimerKey expanderExtraAnalysisDuration) {
             InterproceduralPartialEscapeAnalysisCallTreeState callTreeState = getIPEACallTreeState(callTree);
             if (callTreeState.shouldRunIPEA()) {
-                try (DebugCloseable _ = expanderExtraAnalysisDuration.start(callTree.getDebug())) {
+                try (DebugCloseable dc = expanderExtraAnalysisDuration.start(callTree.getDebug())) {
                     DebugContext debugContext = callTree.getDebug();
                     callTreeState.setAnalysisResult(InterproceduralPartialEscapeAnalysisUtil.runOnFullTree(callTree, coreProviders));
                     debugContext.dump(DebugContext.VERBOSE_LEVEL, callTree, "round %d, after pre-expansion analysis", expansionRound);
