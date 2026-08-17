@@ -96,6 +96,9 @@ import jdk.vm.ci.amd64.AMD64;
 
 public class SubstrateOptions {
 
+    @Option(help = "Enable use of priority inlining during AOT compilation.")//
+    public static final HostedOptionKey<Boolean> AOTPriorityInline = new HostedOptionKey<>(true);
+
     @Option(help = "Deprecated, option no longer has any effect.", deprecated = true, deprecationMessage = "It no longer has any effect, and no replacement is available")//
     static final HostedOptionKey<Boolean> ParseOnce = new HostedOptionKey<>(true);
     @Option(help = "Deprecated, option no longer has any effect.", deprecated = true, deprecationMessage = "It no longer has any effect, and no replacement is available")//
@@ -367,6 +370,8 @@ public class SubstrateOptions {
 
             GraalOptions.OptimizeLongJumps.update(values, !newLevel.isOneOf(OptimizationLevel.O0, OptimizationLevel.BUILD_TIME));
 
+            SubstrateOptions.AOTPriorityInline.update(values, newLevel.isOneOf(OptimizationLevel.O2, OptimizationLevel.O3));
+
             if (newLevel == OptimizationLevel.SIZE) {
                 configureOptimizeForCodeSize(values, true, true);
             }
@@ -414,6 +419,11 @@ public class SubstrateOptions {
          * Do not fan out division.
          */
         disable(GraalOptions.OptimizeDiv, values);
+
+        /*
+         * Disable AOT Inlining
+         */
+        disable(SubstrateOptions.AOTPriorityInline, values);
 
         /*
          * Do more conditional elimination.
