@@ -27,6 +27,8 @@ package com.oracle.svm.hosted.code;
 
 import static com.oracle.svm.hosted.code.SubstrateCompilationDirectives.DEOPT_TARGET_METHOD;
 
+import org.graalvm.collections.EconomicMap;
+
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -77,6 +79,7 @@ import com.oracle.svm.hosted.meta.HostedMethod;
 import com.oracle.svm.hosted.meta.HostedUniverse;
 import com.oracle.svm.hosted.phases.ImageBuildStatisticsCounterPhase;
 import com.oracle.svm.hosted.phases.ImplicitAssertionsPhase;
+import com.oracle.svm.hosted.phases.priorityinline.SubstratePriorityInliningPhase;
 import com.oracle.svm.util.ImageBuildStatistics;
 
 import jdk.graal.compiler.api.replacements.Fold;
@@ -116,12 +119,14 @@ import jdk.graal.compiler.nodes.graphbuilderconf.GraphBuilderContext;
 import jdk.graal.compiler.nodes.graphbuilderconf.InlineInvokePlugin;
 import jdk.graal.compiler.nodes.java.MethodCallTargetNode;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
+import jdk.graal.compiler.options.OptionKey;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.phases.contract.NodeCostUtil;
 import jdk.graal.compiler.phases.OptimisticOptimizations;
 import jdk.graal.compiler.phases.Phase;
 import jdk.graal.compiler.phases.PhaseSuite;
 import jdk.graal.compiler.phases.common.CanonicalizerPhase;
+import jdk.graal.compiler.phases.common.priorityinline.PriorityInliningPhase;
 import jdk.graal.compiler.phases.tiers.HighTierContext;
 import jdk.graal.compiler.phases.tiers.Suites;
 import jdk.graal.compiler.phases.util.GraphOrder;
@@ -1319,8 +1324,51 @@ public class CompileQueue {
         }
     }
 
+    /// Determines whether reduced priority-inliner tuning is applicable to the compilation.
+    protected boolean omitPriorityInliningTuning() {
+        return SubstrateOptions.isMaximumOptimizationLevel();
+    }
+
     protected OptionValues getCustomizedOptions(@SuppressWarnings("unused") HostedMethod method, DebugContext debug) {
-        return debug.getOptions();
+        OptionValues customizedOptions = debug.getOptions();
+        if (omitPriorityInliningTuning()) {
+            return customizedOptions;
+        }
+
+        /*
+         * Inliner parameterization for reduced compile time. These values are derived from
+         * automatic tuning over representative benchmark suites and can be overridden explicitly.
+         */
+        EconomicMap<OptionKey<?>, Object> extraOptions = OptionValues.newOptionMap();
+        if (!PriorityInliningPhase.Options.UsePriorityInliningPEA.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.UsePriorityInliningPEA, false);
+        }
+
+        if (!SubstratePriorityInliningPhase.Options.UseIPEA.hasBeenSet(customizedOptions)) {
+            extraOptions.put(SubstratePriorityInliningPhase.Options.UseIPEA, false);
+        }
+
+        if (!PriorityInliningPhase.Options.TypicalGraphSize.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.TypicalGraphSize, 450);
+        }
+
+        if (!PriorityInliningPhase.Options.TypicalGraphSizeInvokeBonus.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.TypicalGraphSizeInvokeBonus, 100);
+        }
+
+        if (!PriorityInliningPhase.Options.ExpansionInertiaBaseValue.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.ExpansionInertiaBaseValue, 800);
+        }
+
+        if (!PriorityInliningPhase.Options.ExpansionInertiaInvokeBonus.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.ExpansionInertiaInvokeBonus, 40);
+        }
+
+        if (!PriorityInliningPhase.Options.MaxPriorityInliningPeelingIterations.hasBeenSet(customizedOptions)) {
+            extraOptions.put(PriorityInliningPhase.Options.MaxPriorityInliningPeelingIterations, 1);
+        }
+
+        return new OptionValues(customizedOptions, extraOptions);
     }
 
     protected boolean canBeUsedForInlining(Invoke invoke) {

@@ -294,6 +294,7 @@ import jdk.graal.compiler.phases.BasePhase;
 import jdk.graal.compiler.phases.FloatingGuardPhase;
 import jdk.graal.compiler.phases.PhaseSuite;
 import jdk.graal.compiler.phases.Speculative;
+import jdk.graal.compiler.phases.common.AbstractInliningPhase;
 import jdk.graal.compiler.phases.common.AddressLoweringPhase;
 import jdk.graal.compiler.phases.common.CanonicalizerPhase;
 import jdk.graal.compiler.phases.common.DeoptimizationGroupingPhase;
@@ -598,6 +599,10 @@ public class NativeImageGenerator {
                 runtimeConfiguration = new HostedRuntimeConfigurationBuilder(options, bb.getHostVM(), hUniverse, hMetaAccess,
                                 bb.getProviders(MultiMethod.ORIGINAL_METHOD), classInitializationSupport, platformConfig,
                                 bb.getSnippetReflectionProvider()).build();
+                if (GraalConfiguration.hostedInstance() instanceof HostedGraalConfiguration hostedGraalConfiguration) {
+                    hostedGraalConfiguration.setRuntimeConfiguration(runtimeConfiguration);
+                    hostedGraalConfiguration.setHostedUniverse(hUniverse);
+                }
 
                 registerGraphBuilderPlugins(featureHandler, runtimeConfiguration, (HostedProviders) runtimeConfiguration.getProviders(), bb.getMetaAccess(), aUniverse,
                                 nativeLibraries, loader, ParsingReason.AOTCompilation, bb.getAnnotationSubstitutionProcessor(),
@@ -1126,6 +1131,7 @@ public class NativeImageGenerator {
          * Check if any configuration factory class was registered. If not, register the basic one.
          */
         HostedConfiguration.setDefaultIfEmpty();
+        GraalConfiguration.setHostedInstanceIfEmpty(new HostedGraalConfiguration());
         GraalConfiguration.setDefaultIfEmpty();
     }
 
@@ -1564,10 +1570,18 @@ public class NativeImageGenerator {
 
         ListIterator<BasePhase<? super HighTierContext>> position;
         if (hosted) {
+            /*
+             * Remove any existing method inliner before potentially adding an SVM specific
+             * inliner for AOT compilation. Even if `createHostedInliners` below returns
+             * null (e.g. when using `-Ob`), SVM still has its own basic inlining system
+             * (see com.oracle.svm.hosted.code.CompileQueue.TrivialInliningPlugin).
+             */
+            highTier.removePhase(AbstractInliningPhase.class);
+
             position = GraalConfiguration.hostedInstance().createHostedInliners(highTier);
         } else {
             /* Find the runtime inliner. */
-            position = highTier.findPhase(InliningPhase.class);
+            position = highTier.findPhase(AbstractInliningPhase.class);
         }
         if (position != null) {
             /* These two phases must be after all method inlining. */
