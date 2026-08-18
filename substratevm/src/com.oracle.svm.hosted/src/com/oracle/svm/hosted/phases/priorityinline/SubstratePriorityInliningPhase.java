@@ -31,7 +31,7 @@ import java.util.EnumSet;
 import java.util.function.Predicate;
 
 import com.oracle.graal.pointsto.meta.HostedProviders;
-import com.oracle.svm.core.SubstrateTarget;
+import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.nodes.CFunctionPrologueNode;
@@ -151,7 +151,7 @@ public class SubstratePriorityInliningPhase extends PriorityInliningPhase {
     @SharedGlobalPhaseState private static volatile boolean IPEAShutDownHookAdded;
     static final InterProceduralPartialEscapeAnalysisStatistics IPEAStatistics = new InterProceduralPartialEscapeAnalysisStatistics();
 
-    private SubstratePriorityInliningPhase(CanonicalizerPhase canonicalizer, OptionValues options, RuntimeConfiguration runtimeConfig, OptimisticOptimizations optimisticOpts,
+    public SubstratePriorityInliningPhase(CanonicalizerPhase canonicalizer, OptionValues options, RuntimeConfiguration runtimeConfig, OptimisticOptimizations optimisticOpts,
                     HostedUniverse universe, PhaseSuite<HighTierContext> highTier) {
         super(canonicalizer, options, new SubstrateInliningProvider(universe));
         this.runtimeConfig = runtimeConfig;
@@ -197,8 +197,9 @@ public class SubstratePriorityInliningPhase extends PriorityInliningPhase {
         }
     }
 
+    @SuppressWarnings("try")
     private static void logNodeCount(String when, StructuredGraph graph) {
-        try (DebugContext.Scope _ = graph.getDebug().scope(SUBSTRATE_PRIORITY_INLINING_PHASE)) {
+        try (DebugContext.Scope s = graph.getDebug().scope(SUBSTRATE_PRIORITY_INLINING_PHASE)) {
             graph.getDebug().log("[%s] Node count of %s %s inlining: %d", SUBSTRATE_PRIORITY_INLINING_PHASE, graph.method().format("%H.%n"), when, graph.getNodeCount());
         }
     }
@@ -310,17 +311,11 @@ public class SubstratePriorityInliningPhase extends PriorityInliningPhase {
             SubstrateInliningProvider inliningProvider = getInliningProvider();
             boolean allowMethodProfiles = inliningProvider.useMethodChecks(getOptions());
             SubstrateMethodCallTargetNode substrateCallTarget = (SubstrateMethodCallTargetNode) callTarget;
-            if (substrateCallTarget.hasDynamicTypeProfile()) {
-                return substrateCallTarget.getTypeProfile();
-            }
-            if (allowMethodProfiles && substrateCallTarget.hasDynamicMethodProfile()) {
-                return substrateCallTarget.getMethodProfile();
-            }
             JavaTypeProfile staticTypeProfile = substrateCallTarget.getStaticTypeProfile();
             if (staticTypeProfile != null) {
                 return staticTypeProfile;
             }
-            JavaMethodProfile staticMethodProfile = substrateCallTarget.getStaticMethodProfile();
+            JavaMethodProfile staticMethodProfile = substrateCallTarget.getMethodProfile();
             if (allowMethodProfiles && staticMethodProfile != null) {
                 return staticMethodProfile;
             }
@@ -345,8 +340,8 @@ public class SubstratePriorityInliningPhase extends PriorityInliningPhase {
                     if (parameterStamps[i].getStackKind().isObject()) {
                         ObjectStamp parameterStamp = (ObjectStamp) parameterStamps[i];
                         if (parameterStamp.type() != null && ((HostedType) parameterStamp.type()).isWordType()) {
-                            assert BenefitKind.getArgumentStamps(invoke)[i].getStackKind() == SubstrateTarget.getWordKind();
-                            parameterStamps[i] = SubstrateTarget.getWordStamp();
+                            assert BenefitKind.getArgumentStamps(invoke)[i].getStackKind() == ConfigurationValues.getWordKind();
+                            parameterStamps[i] = StampFactory.forKind(ConfigurationValues.getWordKind());
                         }
                     }
                 }

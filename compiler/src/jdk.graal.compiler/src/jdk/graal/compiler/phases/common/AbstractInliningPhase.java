@@ -142,9 +142,12 @@ public abstract class AbstractInliningPhase extends BasePhase<HighTierContext> {
      * Checks whether the resolved force-inlined target is still inlineable under the constraints of
      * the current graph and inlining context.
      */
+    @SuppressWarnings("unused")
     private static boolean canInlineTarget(ResolvedJavaMethod targetMethod, Invoke invoke, HighTierContext context, int recursiveInliningDepth) {
-        StructuredGraph graph = invoke.asNode().graph();
-        return InliningData.checkTargetConditionsHelper(graph, context, targetMethod, invoke, recursiveInliningDepth) == null;
+        if (targetMethod == null || targetMethod.isAbstract() || !targetMethod.getDeclaringClass().isInitialized() || !targetMethod.canBeInlined()) {
+            return false;
+        }
+        return true;
     }
 
     /**

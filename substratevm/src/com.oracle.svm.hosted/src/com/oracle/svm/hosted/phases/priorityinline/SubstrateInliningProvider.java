@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.hosted.phases.priorityinline;
 
-import static com.oracle.svm.core.SubstrateOptions.UseMethodChecks;
 import static jdk.graal.compiler.phases.common.priorityinline.PriorityInliningPhase.Options.MaxPolymorphicDispatches;
 
 import java.util.Objects;
@@ -97,7 +96,7 @@ public class SubstrateInliningProvider extends DefaultInliningProvider {
     public boolean useMethodChecks(OptionValues options) {
         final boolean useLLVMBackend = SubstrateOptions.useLLVMBackend();
         final boolean darwinShared = Platform.includedIn(Platform.DARWIN.class) && SubstrateOptions.SharedLibrary.getValue();
-        return UseMethodChecks.getValue(options) && !useLLVMBackend && !darwinShared;
+        return !useLLVMBackend && !darwinShared;
     }
 
     @Override

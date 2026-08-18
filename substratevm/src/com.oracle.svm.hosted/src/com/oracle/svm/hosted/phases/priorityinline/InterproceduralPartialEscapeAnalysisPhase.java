@@ -441,6 +441,7 @@ public class InterproceduralPartialEscapeAnalysisPhase extends PartialEscapePhas
         }
     }
 
+    @SuppressWarnings("try")
     StructuredGraph copyGraph(StructuredGraph graph, CallerContext callerContext) {
         // Step 1: create copy of graph
         // We don't want to change the original graph during analysis
@@ -450,7 +451,7 @@ public class InterproceduralPartialEscapeAnalysisPhase extends PartialEscapePhas
         replacements.put(graph.start(), graphCopy.start());
 
         UnmodifiableEconomicMap<Node, Node> nodeNodeMap;
-        try (InliningLog.UpdateScope _ = InliningLog.openDefaultUpdateScope(graphCopy.getInliningLog())) {
+        try (InliningLog.UpdateScope s = InliningLog.openDefaultUpdateScope(graphCopy.getInliningLog())) {
             nodeNodeMap = graphCopy.addDuplicates(graph.getNodes(), graph, graph.getNodeCount(), replacements);
         }
         /*

@@ -32,8 +32,6 @@ import java.util.function.Consumer;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
-import jdk.graal.compiler.duplication.util.DuplicationUtil;
-
 import jdk.graal.compiler.core.common.cfg.CFGLoop;
 import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.core.common.type.StampFactory;
@@ -308,7 +306,7 @@ public class SubgraphNode extends ParentNode {
         String reason = getInlineCause().longDescription();
         InliningUtil.traceInlinedMethod(invoke(), getDepth(), true, invoke().callTarget().targetMethod(), reason);
         EconomicSet<Node> canonicalizableNodes = InliningUtil.inlineForCanonicalization(invoke(), getReadonlySubgraph(), true, dispatchedMethod, m -> removeDeletedInvokes(considerChild, m), reason,
-                        "PriorityInliningPhase", new DuplicationUtil.EEInliningReturnAction(context));
+                        "PriorityInliningPhase");
         trackCanonicalizable.accept(canonicalizableNodes);
     }
 

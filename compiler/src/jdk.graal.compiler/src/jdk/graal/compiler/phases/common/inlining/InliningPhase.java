@@ -44,6 +44,15 @@ public class InliningPhase extends AbstractInliningPhase {
         @Option(help = "Unconditionally inline intrinsics", type = OptionType.Debug)//
         public static final OptionKey<Boolean> AlwaysInlineIntrinsics = new OptionKey<>(false);
 
+        @Option(help = "Unconditionally inline directed call sites.", type = OptionType.Debug)//
+        public static final OptionKey<String> DirectedInline = new OptionKey<>(null);
+
+        @Option(help = "Do not inline directed call sites.", type = OptionType.Debug)//
+        public static final OptionKey<String> DirectedDontInline = new OptionKey<>(null);
+
+        @Option(help = "Path to a file with directed inlining rules.", type = OptionType.Debug)//
+        public static final OptionKey<String> DirectedInliningRulesFile = new OptionKey<>(null);
+
         /**
          * This is a defensive measure against known pathologies of the inliner where the breadth of
          * the inlining call tree exploration can be wide enough to prevent inlining from completing

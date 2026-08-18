@@ -116,7 +116,7 @@ public final class ImageLayerSectionFeature implements InternalFeature, FeatureS
 
     @Override
     public List<Class<? extends Feature>> getRequiredFeatures() {
-        return List.of(HostedDynamicLayerInfoFeature.class, LoadImageSingletonFeature.class, CrossLayerConstantRegistryFeature.class);
+        return List.of(LoadImageSingletonFeature.class, CrossLayerConstantRegistryFeature.class);
     }
 
     @Override
