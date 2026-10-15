@@ -159,6 +159,12 @@ public class CompileQueue {
         }
     }
 
+    /*
+     * Use the same fallback as
+     * "An Optimization-Driven Incremental Inline Substitution Algorithm for Just-in-Time Compilers"
+     */
+    private static final int FALLBACK_SIZE = 50000;
+
     protected final HostedUniverse universe;
     private final Boolean deoptimizeAll;
     protected final List<Policy> policies;
@@ -180,7 +186,6 @@ public class CompileQueue {
 
     private final boolean printMethodHistogram = NativeImageOptions.PrintMethodHistogram.getValue();
     private final boolean optionAOTTrivialInline = SubstrateOptions.AOTTrivialInline.getValue();
-    private final int optionFallbackSize = SubstrateOptions.AOTSingleCallsiteFallbackSize.getValue();
 
     public record UnpublishedTrivialMethods(CompilationGraph unpublishedGraph, boolean newlyTrivial) {
     }
@@ -1001,9 +1006,9 @@ public class CompileQueue {
                  * Add a small +100 buffer to account for canonicalizations changing the final
                  * expected size.
                  */
-                assert !inliningPlugin.inlinedDuringDecoding || method.compilationInfo.sizeLastRound <= optionFallbackSize + 100 : "Single-callsite inlining produced oversized method " + method
+                assert !inliningPlugin.inlinedDuringDecoding || method.compilationInfo.sizeLastRound <= FALLBACK_SIZE + 100 : "Single-callsite inlining produced oversized method " + method
                                 .format("%H.%n(%p)") +
-                                ": size=" + method.compilationInfo.sizeLastRound + ", threshold=" + optionFallbackSize;
+                                ": size=" + method.compilationInfo.sizeLastRound + ", threshold=" + FALLBACK_SIZE;
             }
         } catch (Throwable ex) {
             throw debug.handle(ex);
@@ -1041,7 +1046,7 @@ public class CompileQueue {
             return false;
         }
 
-        if (totalSize >= optionFallbackSize) {
+        if (totalSize >= FALLBACK_SIZE) {
             sciLastRoundFailed.put(callee, inliningRound);
             return false;
         }

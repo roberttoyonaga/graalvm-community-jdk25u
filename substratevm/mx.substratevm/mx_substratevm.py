@@ -1114,13 +1114,40 @@ def _assert_scismoke_histogram(tracker, is_sci_enabled, variant_name):
 def _scifallbacktest(native_image, path, args):
     mx_util.ensure_dir_exists(path)
     binary_path = join(path, 'scifallback')
+    # Generate enough non-foldable work to cross the production 50,000 size limit.
+    # Each adjacent pair stays below the limit, so only tracking the immediate
+    # caller (instead of the root's accumulated size) incorrectly inlines it all.
+    source_path = join(path, 'SciFallbackTest.java')
+    classes_path = join(path, 'scifallback-classes')
+    mx_util.ensure_dir_exists(classes_path)
+    chain_length = 128
+    with open(source_path, 'w') as source:
+        source.write('import com.oracle.svm.core.NeverInlineTrivial;\n'
+                     'public class SciFallbackTest {\n'
+                     '    private static volatile int input = 17;\n'
+                     '    public static void main(String[] args) {\n'
+                     '        System.out.println("Result: " + chainLink0(args.length));\n'
+                     '    }\n')
+        for method in range(chain_length):
+            source.write('    @NeverInlineTrivial(reason = "Exercise single-callsite inlining")\n'
+                         f'    private static int chainLink{method}(int result) {{\n')
+            # Volatile accesses prevent folding; straight-line code grows the graph
+            # without relying on loop unrolling or creating additional callsites.
+            # Stores also avoid long arithmetic dependency chains if all callees
+            # are incorrectly inlined, so the size assertion detects the regression.
+            for operation in range(128):
+                source.write(f'        input = (result ^ input) * 31 + {operation};\n')
+            result = f'chainLink{method + 1}(input)' if method + 1 < chain_length else 'input'
+            source.write(f'        return {result};\n    }}\n')
+        source.write('}\n')
+    mx.run([mx.get_jdk().javac, '-cp', mx.classpath('com.oracle.svm.core'),
+            '-d', classes_path, source_path])
     build_args = [
-        '-cp', classpath('com.oracle.svm.test.sci'),
-        '--initialize-at-build-time=com.oracle.svm.test.sci',
-        'com.oracle.svm.test.sci.SciFallbackTest',
+        '-cp', classes_path,
+        '--initialize-at-build-time=SciFallbackTest',
+        'SciFallbackTest',
     ] + svm_experimental_options([
         '-H:+AOTSingleCallsiteInline',
-        '-H:AOTSingleCallsiteFallbackSize=500',
     ]) + [
         '-o', binary_path,
     ] + args
@@ -1842,7 +1869,7 @@ def scismoketest(args, config=None):
         lambda native_image, a:
             _scismoketest(native_image, output_path, a), unmask(parsed.image_args),
         config=config
-    )\
+    )
 
 @mx.command(suite_name=suite.name, command_name='scifallbacktest', usage_msg='[options]')
 def scifallbacktest(args, config=None):
